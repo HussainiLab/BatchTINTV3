@@ -22,12 +22,12 @@ https://desktop.github.com/
 
 3) In the Command Prompt navigate to the folder where you want to clone the repository (type in: cd folder_path).
 
-If you want it on your Desktop type in the following: cd "C:\Users\ [user name]\Desktop\"
+If you want it on your Desktop type in the following: ```cd "C:\Users\ [user name]\Desktop\"```
 
 4) Then your next step will be to clone the repository by typing in the following to your Command Prompt:
-
+```
 git clone https://github.com/GeoffBarrett/BatchTINT.git
-
+```
 ***Note: This may take a few minutes. If there is an error produced by the Command Prompt saying the following:*** 
 
 ***'git' is not recognized as an internal or external command, operable program or batch file.***
@@ -67,16 +67,16 @@ C:\Python34
 You should also upgrade the 'pip' python script which allows for the downloading of python libraries. To upgrade pip, type the
 following into the Command Prompt (remember to close and re-open the Command Prompt after adding the system variable): 
 
-python -m pip install --upgrade pip
+```python -m pip install --upgrade pip```
 
 Now you can type the following into the command prompt to install PyQt4:
 
-python -m pip install [wheel file path] 
+```python -m pip install [wheel file path] ```
 
 ***If you have spaces in your wheel file path make sure to surround the path by quotes***
 example: 
 
-python -m pip install "C:\Users\My Name\Desktop\GitHub\file.whl"
+```python -m pip install "C:\Users\My Name\Desktop\GitHub\file.whl"```
 
 The wheel files are the following:
 
@@ -90,7 +90,7 @@ The wheel files are the following:
 
 Type in the following into the Command Prompt:
 
-python -m pip install pillow
+```python -m pip install pillow```
 
 7) You will also have to add Tint to the system variable as we did before with GitHub and Python
 
@@ -102,11 +102,11 @@ Add the following path for 64-bit systems: C:\Program Files (x86)\Axona\Tint
 
 Now in your Command Prompt you can type the following in order to run the GUI:
 The easiest way to run it is to create a '.bat' file on the desktop that contains the following information:
-
+```
 cd "[pathway to your BatchTINT folder]"
 python BatchSort.py
 exit
-
+```
 When you click this .bat file it will run the program.
 
 Now you can see a main window of the GUI that states the current directory (if it's your first time opening the program, it will say 
