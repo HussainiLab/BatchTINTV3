@@ -26,7 +26,7 @@ If you want it on your Desktop type in the following: ```cd "C:\Users\ [user nam
 
 4) Then your next step will be to clone the repository by typing in the following to your Command Prompt:
 ```
-git clone https://github.com/GeoffBarrett/BatchTINT.git
+git clone https://github.com/ephyslab/BatchTINTV3.git
 ```
 ***Note: This may take a few minutes. If there is an error produced by the Command Prompt saying the following:*** 
 
@@ -144,7 +144,7 @@ It is important to change the ***Number of Tetrodes*** option in the 'basic' tab
 
 Once these settings have been applied, the values will be saved for the next time you open up the GUI.
 
-There is also capabilities of determining if you want Tint to run in "silent" mode or be "visible". There is a Run Silently checkbox on main window of the GUI that you will be able to check. If it is checked everything will run in the background.
+There is also the option if you want Tint to run in "silent" mode or be "visible". There is a Run Silently checkbox on main window of the GUI that you will be able to check. If it is checked everything will run in the background.
 
 You can press Run if all the settings are correct. A Processed folder will be created within the directory you chose which will have your newly created .CUT files.
 
