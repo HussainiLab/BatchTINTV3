@@ -521,7 +521,7 @@ def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
         analyzable = False
 
         # if eeg not in the f_list move the files to the missing associated file folder
-    if not set([set_file + '.eeg', set_file + '.pos']).issubset(f_list) :
+    if not set([set_file + '.eeg', set_file + '.pos']).issubset(f_list):
 
         self.LogAppend.myGUI_signal_str.emit(
             '[%s %s]: There is no %s or %s file in this folder, skipping analysis!' % (
@@ -571,7 +571,8 @@ def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
         analyzable = False
 
     if not analyzable:
-        associated_files = [file for file in f_list if set_file in file]
+        associated_files = get_associated_files(f_list, set_file)
+        # associated_files = [file for file in f_list if set_file in file]
         missing_dir = os.path.join(sub_directory_fullpath, 'MissingAssociatedFiles')
         if not os.path.exists(missing_dir):
             os.makedirs(missing_dir)
@@ -580,6 +581,10 @@ def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
             os.rename(os.path.join(sub_directory_fullpath, file), os.path.join(missing_dir, file))
 
     return analyzable, error
+
+
+def get_associated_files(file_list, set_filename):
+    return [file for file in file_list if set_filename == os.path.splitext(file)[0]]
 
 
 def send_email(self, experimenter, error, sub_directory, processed_directory):
