@@ -6,6 +6,23 @@ from PyQt4 import QtGui, QtCore
 from email.mime.text import MIMEText
 
 
+def is_tetrode(file, session):
+
+    if os.path.splitext(file)[0] == session:
+        try:
+            tetrode_number = int(os.path.splitext(file)[1][1:])
+            return True
+        except ValueError:
+            return False
+    else:
+        return False
+
+
+def get_tetrode_files(file_list, session):
+    tetrode_files = [file for file in file_list if is_tetrode(file, session)]
+    return tetrode_files
+
+
 def klusta(self, sub_directory, directory):
     self.current_subdirectory = os.path.basename(sub_directory)
     self.LogAppend.myGUI_signal_str.emit(
@@ -60,8 +77,10 @@ def klusta(self, sub_directory, directory):
                 :8], set_file, i+1, len(set_files)))
 
         # acquires tetrode files within directory
-        tet_list = [file for file in f_list if file in ['%s.%d' % (set_file, tet_num)
-                                                        for tet_num in range(1, int(self.settings['NumTet']) + 1)]]
+        # tet_list = [file for file in f_list if file in ['%s.%d' % (set_file, tet_num)
+        #                                                for tet_num in range(1, int(self.settings['NumTet']) + 1)]]
+
+        tet_list = get_tetrode_files(f_list, set_file)
         #  if there are no tetrodes then skips
 
         analyzable, error_return = check_analyzable(self, sub_directory_fullpath, set_file, tet_list)
@@ -170,9 +189,13 @@ def analyze_tetrode(self, q, experimenter,
         tet_list = [q.get()]
         for tet_fname in tet_list:
 
+            '''
             for i in range(1, int(self.settings['NumTet']) + 1):
                 if ['%s%d' % ('.', i) in tet_fname][0]:
                     tetrode = i
+            '''
+
+            tetrode = int(os.path.splitext(tet_fname)[-1][1:])
 
             self.LogAppend.myGUI_signal_str.emit(
                 '[%s %s]: Now analyzing the following file: %s!' % (

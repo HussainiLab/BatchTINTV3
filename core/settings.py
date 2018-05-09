@@ -32,14 +32,14 @@ class Settings_Window(QtGui.QTabWidget):
         self.addTab(tab2, 'Advanced')
         # -------------------- number of tetrodes ---------------------
 
-        num_tet_l = QtGui.QLabel('Number of Tetrodes')
-        self.num_tet = QtGui.QLineEdit()
-        self.num_tet.setToolTip('The maximum number of tetrodes in your directory folders.')
+        #num_tet_l = QtGui.QLabel('Number of Tetrodes')
+        #self.num_tet = QtGui.QLineEdit()
+        #self.num_tet.setToolTip('The maximum number of tetrodes in your directory folders.')
 
-        num_tet_lay = QtGui.QHBoxLayout()
-        num_tet_lay.addWidget(num_tet_l)
-        # num_tet_lay.addStretch('1')
-        num_tet_lay.addWidget(self.num_tet)
+        #num_tet_lay = QtGui.QHBoxLayout()
+        #num_tet_lay.addWidget(num_tet_l)
+        ## num_tet_lay.addStretch('1')
+        #num_tet_lay.addWidget(self.num_tet)
 
         # ------------------ clustering features --------------------------------
         clust_l = QtGui.QLabel('Clustering Features:')
@@ -246,7 +246,7 @@ class Settings_Window(QtGui.QTabWidget):
         # -------------------------- layouts ----------------------------------------------------
 
         # basic_lay_order = [chan_name_lay, clust_feat_lay, clust_maxmin_lay, basic_butn_lay]
-        basic_lay_order = [num_tet_lay, chan_name_lay, clust_feat_lay, grid_lay, basic_butn_lay]
+        basic_lay_order = [chan_name_lay, clust_feat_lay, grid_lay, basic_butn_lay]
         basic_lay = QtGui.QVBoxLayout()
 
         # basic_lay.addStretch(1)
@@ -289,7 +289,7 @@ class Settings_Window(QtGui.QTabWidget):
                 self.SplitEvery.setText(str(self.settings['SplitEvery']))
                 self.FullStepEvery.setText(str(self.settings['FullStepEvery']))
                 self.Subset.setText(str(self.settings['Subset']))
-                self.num_tet.setText(str(self.settings['NumTet']))
+                # self.num_tet.setText(str(self.settings['NumTet']))
 
                 for name in self.chan_names:
                     if int(self.settings[name]) == 1:
@@ -332,7 +332,7 @@ class Settings_Window(QtGui.QTabWidget):
                 default_reporting = []
                 default_set_channels_inc = []
 
-                self.settings['NumTet'] = '8'
+                # self.settings['NumTet'] = '8'
                 self.settings['NumFet'] = 3
                 self.settings['Silent'] = 1
                 self.settings['Multi'] = 0
@@ -353,7 +353,7 @@ class Settings_Window(QtGui.QTabWidget):
                 self.SplitEvery.setText(str(self.settings['SplitEvery']))
                 self.FullStepEvery.setText(str(self.settings['FullStepEvery']))
                 self.Subset.setText(str(self.settings['Subset']))
-                self.num_tet.setText(str(self.settings['NumTet']))
+                # self.num_tet.setText(str(self.settings['NumTet']))
 
                 for name in self.chan_names:
                     if self.settings[name] == 1:
@@ -444,7 +444,7 @@ class Settings_Window(QtGui.QTabWidget):
             elif option not in default_keys and self.report_cbs[self.position[option]].isChecked() == True:
                 self.report_cbs[self.position[option]].toggle()
 
-        self.num_tet.setText('8')
+        # self.num_tet.setText('8')
 
         self.apply_tab1btn.animateClick()
 
@@ -486,7 +486,7 @@ class Settings_Window(QtGui.QTabWidget):
             UseFeat += '1'
 
             self.settings['NumFet'] = len(feat_inc)
-            self.settings['NumTet'] = str(self.num_tet.text())
+            # self.settings['NumTet'] = str(self.num_tet.text())
             self.settings['UseFeatures'] = UseFeat
 
             self.backbtn.animateClick()
@@ -512,3 +512,7 @@ class Settings_Window(QtGui.QTabWidget):
             self.backbtn2.animateClick()
         with open(self.settings_fname, 'w') as filename:
             json.dump(self.settings, filename)  # save the default values to this file
+
+    def raise_window(self):
+        self.raise_()
+        self.show()
