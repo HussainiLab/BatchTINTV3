@@ -336,8 +336,15 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
     def stopBatch(self):
         # self.klustabtn.clicked.disconnect()
         self.klustabtn.clicked.connect(lambda: self.run(self.current_directory_name))
-        self.BatchTintThread.quit()
+        # self.BatchTintThread.quit()
         # self.RepeatAddSessionsThread.quit()
+        self.BatchTintThread.terminate()
+
+        self.LogAppend.myGUI_signal_str.emit(
+            '[%s %s]: BatchTint stopped!' % (str(datetime.datetime.now().date()),
+                                                                 str(datetime.datetime.now().time())[
+                                                                 :8]))
+
         self.batch_tint = False
         self.klustabtn.setText('Run')
         self.klustabtn.setToolTip(
