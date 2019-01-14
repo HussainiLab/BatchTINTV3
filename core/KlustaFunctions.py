@@ -1,9 +1,10 @@
 # import os, read_data, json, subprocess
 import os, json, subprocess, time, datetime, queue, threading, smtplib, shutil
 from distutils.dir_util import copy_tree
-from PyQt4 import QtGui, QtCore
+from PyQt4 import QtGui
 # from multiprocessing.dummy import Pool as ThreadPool
-from email.mime.text import MIMEText
+# from email.mime.text import MIMEText
+from core.utils import print_msg
 
 
 def is_tetrode(file, session):
@@ -23,14 +24,18 @@ def get_tetrode_files(file_list, session):
     return tetrode_files
 
 
-def klusta(self, sub_directory, directory):
-    self.current_subdirectory = os.path.basename(sub_directory)
-    self.LogAppend.myGUI_signal_str.emit(
-        '[%s %s]: Now analyzing files in the %s folder!' % (
-            str(datetime.datetime.now().date()),
-            str(datetime.datetime.now().time())[
-            :8], sub_directory))
-    
+def klusta(sub_directory, directory, settings, settings_filename=None, self=None):
+
+    msg = '[%s %s]: Now analyzing files in the %s folder!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], sub_directory)
+
+    print_msg(self, msg)
+
+    if self is not None:
+        self.current_subdirectory = os.path.basename(sub_directory)
+
     sub_directory_fullpath = os.path.join(directory, sub_directory)  # defines fullpath
 
     logfile_directory = os.path.join(sub_directory_fullpath, 'LogFiles')  # defines directory for log files
@@ -42,55 +47,54 @@ def klusta(self, sub_directory, directory):
         if not os.path.exists(_):  # makes the directories if they don't exist
             os.makedirs(_)
 
-    with open(self.settings_fname, 'r+') as f:  # opens setting file
-        self.settings = json.load(f)  # loads settings
-
     f_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
 
     set_files = [file for file in f_list if '.set' in file]  # fines .set files
 
     if len(set_files) > 1:  # displays messages counting how many set files in directory
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: There are %d \'.set\' files in this directory!' % (
+        msg = '[%s %s]: There are %d \'.set\' files in this directory!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], len(set_files)))
+                :8], len(set_files))
+
+        print_msg(self, msg)
+
     elif len(set_files) == 1:
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: There is %d \'.set\' file in this directory!' % (
+
+        msg = '[%s %s]: There is %d \'.set\' file in this directory!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], len(set_files)))
+                :8], len(set_files))
+
+        print_msg(self, msg)
 
     skipped = 0
     experimenter = []  # initializing experimenter list
     error = []  # initializing error list
     for i in range(len(set_files)):  # loops through each set file
-        #self.current_session = set_files[i]
         set_file = os.path.splitext(set_files[i])[0]  # define set file without extension
         set_path = os.path.join(sub_directory_fullpath, set_file)  # defines set file path
 
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
+        msg = '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], set_file, i+1, len(set_files)))
+                :8], set_file, i+1, len(set_files))
+
+        print_msg(self, msg)
 
         # acquires tetrode files within directory
-        # tet_list = [file for file in f_list if file in ['%s.%d' % (set_file, tet_num)
-        #                                                for tet_num in range(1, int(self.settings['NumTet']) + 1)]]
 
         tet_list = get_tetrode_files(f_list, set_file)
         #  if there are no tetrodes then skips
 
-        analyzable, error_return = check_analyzable(self, sub_directory_fullpath, set_file, tet_list)
+        analyzable, error_return = check_session_files(sub_directory_fullpath, set_file, tet_list, self=self)
 
         if analyzable:
             q = queue.Queue()
             for u in tet_list:
                 q.put(u)
 
-            ThreadCount = int(self.settings['NumThreads'])
+            ThreadCount = int(settings['NumThreads'])
 
             if ThreadCount > len(tet_list):
                 ThreadCount = len(tet_list)
@@ -107,10 +111,10 @@ def klusta(self, sub_directory, directory):
             while not q.empty():
                 Threads = []
                 for i in range(ThreadCount):
-                    t = threading.Thread(target=analyze_tetrode, args=(self, q, experimenter, error, skipped_mat,
+                    t = threading.Thread(target=analyze_tetrode, args=(q, settings, experimenter, error, skipped_mat,
                                                                        i, set_path, set_file, f_list,
                                                                        sub_directory_fullpath, logfile_directory,
-                                                                       inifile_directory))
+                                                                       inifile_directory), kwargs={'self': self})
                     time.sleep(1)
                     t.daemon = True
                     t.start()
@@ -123,24 +127,16 @@ def klusta(self, sub_directory, directory):
         else:
             error.extend(error_return)
             continue
-    '''
-    if 'skipped_mat' in locals():
-        for k in range(len(skipped_mat)):
-            if skipped_mat[k] == 1:
-                skipped = 1
-
-
-    if skipped == 0:
-    '''
-    self.LogAppend.myGUI_signal_str.emit(
-        '[%s %s]: Analysis in the %s directory has been completed!' % (
+    msg = '[%s %s]: Analysis in the %s directory has been completed!' % (
             str(datetime.datetime.now().date()),
             str(datetime.datetime.now().time())[
-            :8], sub_directory))
+            :8], sub_directory)
+
+    print_msg(self, msg)
 
     processed_directory = os.path.join(directory, 'Processed')
 
-    send_email(self, experimenter, error, sub_directory, processed_directory)
+    send_email(experimenter, error, sub_directory, processed_directory, self=self)
 
     directory_source = sub_directory_fullpath
     directory_destination = os.path.join(processed_directory, sub_directory)
@@ -155,27 +151,22 @@ def klusta(self, sub_directory, directory):
                 try:
                     # shutil.copytree(directory_source, directory_destination)
                     copy_tree(directory_source, directory_destination)
-                except:
+                except PermissionError:
                     return
                 shutil.rmtree(directory_source)
             else:
                 shutil.move(directory_source, processed_directory)
         except PermissionError:
             processing = 1
-    self.current_subdirectory = ''
-    self.current_session = ''
+
+    if self is not None:
+        self.current_subdirectory = ''
+        self.current_session = ''
 
 
-def analyze_tetrode(self, q, experimenter,
+def analyze_tetrode(q, settings,  experimenter,
                     error, skipped_mat, index, set_path, set_file, f_list, sub_directory_fullpath,
-                    logfile_directory, inifile_directory):
-    '''
-    self.settings_fname = 'settings.json'
-
-    with open(self.settings_fname, 'r+') as filename:
-        self.settings = json.load(filename)
-    '''
-    # item = q.get()
+                    logfile_directory, inifile_directory, self=None):
 
     inactive_tet_dir = os.path.join(sub_directory_fullpath, 'InactiveTetrodeFiles')
     no_spike_dir = os.path.join(sub_directory_fullpath, 'NoSpikeFiles')
@@ -189,30 +180,26 @@ def analyze_tetrode(self, q, experimenter,
         tet_list = [q.get()]
         for tet_fname in tet_list:
 
-            '''
-            for i in range(1, int(self.settings['NumTet']) + 1):
-                if ['%s%d' % ('.', i) in tet_fname][0]:
-                    tetrode = i
-            '''
-
             tetrode = int(os.path.splitext(tet_fname)[-1][1:])
 
-            self.LogAppend.myGUI_signal_str.emit(
-                '[%s %s]: Now analyzing the following file: %s!' % (
+            msg = '[%s %s]: Now analyzing the following file: %s!' % (
                     str(datetime.datetime.now().date()),
                     str(datetime.datetime.now().time())[
-                    :8], tet_fname))
+                    :8], tet_fname)
 
-            clu_name = set_path + '.clu.' + str(tetrode)
-            cut_path = set_path + '_' + str(tetrode) + '.cut'
-            cut_name = set_file + '_' + str(tetrode) + '.cut'
+            print_msg(self, msg)
+
+            clu_name = '%s.clu.%d' % (set_path, tetrode)
+            cut_path = '%s_%d.cut' % (set_path, tetrode)
+            cut_name = os.path.basename(cut_path)
 
             if cut_name in f_list:
-                self.LogAppend.myGUI_signal_str.emit(
-                    '[%s %s]: The %s file has already been analyzed!' % (
+                msg = '[%s %s]: The %s file has already been analyzed!' % (
                         str(datetime.datetime.now().date()),
                         str(datetime.datetime.now().time())[
-                        :8], tet_fname))
+                        :8], tet_fname)
+
+                print_msg(self, msg)
 
                 q.task_done()
                 continue
@@ -224,18 +211,18 @@ def analyze_tetrode(self, q, experimenter,
 
             parm_space = ' '
             # klusta kwik parameters to utilize
-            kkparmstr = parm_space.join(['-MaxPossibleClusters', str(self.settings['MaxPos']),
-                                         '-UseFeatures', str(self.settings['UseFeatures']),
-                                         '-nStarts', str(self.settings['nStarts']),
-                                         '-RandomSeed', str(self.settings['RandomSeed']),
-                                         '-DistThresh', str(self.settings['DistThresh']),
-                                         '-FullStepEvery', str(self.settings['FullStepEvery']),
-                                         '-ChangedThresh', str(self.settings['ChangedThresh']),
-                                         '-MaxIter', str(self.settings['MaxIter']),
-                                         '-SplitEvery', str(self.settings['SplitEvery']),
-                                         '-Subset', str(self.settings['Subset']),
-                                         '-PenaltyK', str(self.settings['PenaltyK']),
-                                         '-PenaltyKLogN', str(self.settings['PenaltyKLogN']),
+            kkparmstr = parm_space.join(['-MaxPossibleClusters', str(settings['MaxPos']),
+                                         '-UseFeatures', str(settings['UseFeatures']),
+                                         '-nStarts', str(settings['nStarts']),
+                                         '-RandomSeed', str(settings['RandomSeed']),
+                                         '-DistThresh', str(settings['DistThresh']),
+                                         '-FullStepEvery', str(settings['FullStepEvery']),
+                                         '-ChangedThresh', str(settings['ChangedThresh']),
+                                         '-MaxIter', str(settings['MaxIter']),
+                                         '-SplitEvery', str(settings['SplitEvery']),
+                                         '-Subset', str(settings['Subset']),
+                                         '-PenaltyK', str(settings['PenaltyK']),
+                                         '-PenaltyKLogN', str(settings['PenaltyKLogN']),
                                          '-UseDistributional', '1',
                                          '-UseMaskedInitialConditions', '1',
                                          '-AssignToFirstClosestMask', '1',
@@ -245,10 +232,10 @@ def analyze_tetrode(self, q, experimenter,
             s = "\n"
             # channels to include
             inc_channels = s.join(['[IncludeChannels]',
-                                   '1=' + str(self.settings['1']),
-                                   '2=' + str(self.settings['2']),
-                                   '3=' + str(self.settings['3']),
-                                   '4=' + str(self.settings['4'])
+                                   '1=' + str(settings['1']),
+                                   '2=' + str(settings['2']),
+                                   '3=' + str(settings['3']),
+                                   '4=' + str(settings['4'])
                                    ])
             # write these settings to the .ini file
             with open(ini_fpath, 'w') as fname:
@@ -262,46 +249,36 @@ def analyze_tetrode(self, q, experimenter,
                                    ])
 
                 clust_ft_seq = s.join(['\n[ClusteringFeatures]',
-                                       str('PC1=' + str(self.settings['PC1'])),
-                                       str('PC2=' + str(self.settings['PC2'])),
-                                       str('PC3=' + str(self.settings['PC3'])),
-                                       str('PC4=' + str(self.settings['PC4'])),
-                                       str('A=' + str(self.settings['A'])),
-                                       str('Vt=' + str(self.settings['Vt'])),
-                                       str('P=' + str(self.settings['P'])),
-                                       str('T=' + str(self.settings['T'])),
-                                       str('tP=' + str(self.settings['tP'])),
-                                       str('tT=' + str(self.settings['tT'])),
-                                       str('En=' + str(self.settings['En'])),
-                                       str('Ar=' + str(self.settings['Ar']))
+                                       str('PC1=' + str(settings['PC1'])),
+                                       str('PC2=' + str(settings['PC2'])),
+                                       str('PC3=' + str(settings['PC3'])),
+                                       str('PC4=' + str(settings['PC4'])),
+                                       str('A=' + str(settings['A'])),
+                                       str('Vt=' + str(settings['Vt'])),
+                                       str('P=' + str(settings['P'])),
+                                       str('T=' + str(settings['T'])),
+                                       str('tP=' + str(settings['tP'])),
+                                       str('tT=' + str(settings['tT'])),
+                                       str('En=' + str(settings['En'])),
+                                       str('Ar=' + str(settings['Ar']))
                                        ])
 
                 report_seq = s.join(['\n[Reporting]',
-                                     'Log=' + str(self.settings['Log File']),
-                                     'Verbose=' + str(self.settings['Verbose']),
-                                     'Screen=' + str(self.settings['Screen'])
+                                     'Log=' + str(settings['Log File']),
+                                     'Verbose=' + str(settings['Verbose']),
+                                     'Screen=' + str(settings['Screen'])
                                      ])
 
                 for write_order in [main_seq, clust_ft_seq, report_seq]:
                     fname.seek(0, 2)  # seek the files end
                     fname.write(write_order)
-                fname.close()
-            '''
-            writing = 1
 
-            while writing == 1:
-                new_cont = os.listdir(sub_directory_fullpath)
-                if ini_fname in new_cont:
-                    writing = 0
-                else:
-                    writing = 1
-            '''
+                fname.close()
 
             log_fpath = tet_path + '_log.txt'
             log_fname = tet_fname + '_log.txt'
 
             cmdline = ["cmd", "/q", "/k", "echo off"]
-            #cmdline = ["cmd", "/q", "/k", "echo off"]
 
             reading = 1
             with open(tet_path, 'rb') as f:
@@ -315,9 +292,8 @@ def analyze_tetrode(self, q, experimenter,
                     elif 'data_start' in str(line):
                         reading = 0
 
-            #time.sleep(2)
             cmd = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-            if self.settings['Silent'] == 0:
+            if settings['Silent'] == 0:
                 batch = bytes(
                     'tint ' + '"' + set_path + '" ' + str(
                         tetrode) + ' "' + log_fpath + '" /runKK /KKoptions "' +
@@ -332,9 +308,6 @@ def analyze_tetrode(self, q, experimenter,
 
             cmd.stdin.write(batch)
             cmd.stdin.flush()
-
-            # result = cmd.stdout.read()
-            # print(result.decode())
 
             processing = 1
 
@@ -362,11 +335,12 @@ def analyze_tetrode(self, q, experimenter,
                             os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
                             os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
 
-                        self.LogAppend.myGUI_signal_str.emit(
-                            '[%s %s]: The analysis of the %s file has finished!' % (
+                        msg = '[%s %s]: The analysis of the %s file has finished!' % (
                                 str(datetime.datetime.now().date()),
                                 str(datetime.datetime.now().time())[
-                                :8], tet_fname))
+                                :8], tet_fname)
+
+                        print_msg(self, msg)
                         pass
 
                     except PermissionError:
@@ -481,62 +455,83 @@ def analyze_tetrode(self, q, experimenter,
                 pass
 
 
-def check_klusta_ready(self, directory):
+def check_klusta_ready(settings, directory, self=None, settings_filename=None, numThreads=None, numCores=None):
     klusta_ready = True
-    with open(self.settings_fname, 'r+') as filename:
-        self.settings = json.load(filename)
-    self.settings['NumThreads'] = str(self.Multithread.text())
-    self.settings['Cores'] = str(self.core_num.text())
 
-    with open(self.settings_fname, 'w') as filename:
-        json.dump(self.settings, filename)
+    # with open(settings_filename, 'r+') as f:  # opens setting file
+    #     settings = json.load(f)  # loads settings
 
-    if self.settings['NumFet'] > 4:
-        self.choice = ''
-        self.LogError.myGUI_signal_str.emit('ManyFet')
+    settings['NumThreads'] = str(numThreads)
+    settings['Cores'] = str(numCores)
 
-        while self.choice == '':
-            time.sleep(1)
+    if settings_filename is not None:
+        # overwrite settings filename with current settings
+        with open(settings_filename, 'w') as filename:
+            json.dump(settings, filename)
 
-        if self.choice == QtGui.QMessageBox.No:
-            klusta_ready = False
-        elif self.choice == QtGui.QMessageBox.Yes:
-            klusta_ready = True
+    if settings['NumFet'] > 4:
+
+        if self is not None:
+            self.choice = ''
+            self.LogError.myGUI_signal_str.emit('ManyFet')
+
+            while self.choice == '':
+                time.sleep(1)
+
+            if self.choice == QtGui.QMessageBox.No:
+                klusta_ready = False
+            elif self.choice == QtGui.QMessageBox.Yes:
+                klusta_ready = True
+        else:
+            print("You have chosen more than four features. clustering will take a long time!")
 
     if directory == 'No Directory Currently Chosen!':
-        self.choice = ''
-        self.LogError.myGUI_signal_str.emit('NoDir')
-        while self.choice == '':
-            time.sleep(1)
 
-        if self.choice == QtGui.QMessageBox.Ok:
-            return False
+        if self is None:
+            self.choice = ''
+            self.LogError.myGUI_signal_str.emit('NoDir')
+            while self.choice == '':
+                time.sleep(1)
+
+            if self.choice == QtGui.QMessageBox.Ok:
+                return False
 
     if 'Google Drive' in directory:
-        self.choice = ''
-        self.LogError.myGUI_signal_str.emit('GoogleDir')
-        while self.choice == '':
-            time.sleep(1)
+        if self is None:
+            self.choice = ''
+            self.LogError.myGUI_signal_str.emit('GoogleDir')
+            while self.choice == '':
+                time.sleep(1)
 
-        if self.choice == QtGui.QMessageBox.Yes:
-            klusta_ready = True
-        elif self.choice == QtGui.QMessageBox.No:
-            klusta_ready = False
+            if self.choice == QtGui.QMessageBox.Yes:
+                klusta_ready = True
+            elif self.choice == QtGui.QMessageBox.No:
+                klusta_ready = False
 
     return klusta_ready
 
 
-def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
+def check_session_files(sub_directory_fullpath, set_file, tet_list, self=None):
+    """
+    This method will ensure that all the necessary files exist before continuing.
+    :param sub_directory_fullpath:
+    :param set_file:
+    :param tet_list:
+    :param self:
+    :return:
+    """
     error = []
     analyzable = True
     f_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
 
     if not tet_list:
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: The %s \'.set\' file has no tetrodes to analyze!' % (
+
+        msg = '[%s %s]: The %s \'.set\' file has no tetrodes to analyze!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], set_file))
+                :8], set_file)
+
+        print_msg(self, msg)
 
         # appends error to error list
         error.append('\tThe ' +
@@ -545,14 +540,12 @@ def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
 
         # if eeg not in the f_list move the files to the missing associated file folder
     if not set([set_file + '.eeg', set_file + '.pos']).issubset(f_list):
-
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: There is no %s or %s file in this folder, skipping analysis!' % (
+        msg = '[%s %s]: There is no %s or %s file in this folder, skipping analysis!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], set_file + '.eeg', set_file + '.pos'))
+                :8], set_file + '.eeg', set_file + '.pos')
 
-        # skipped = 1
+        print_msg(self, msg)
 
         error.append('\tThe "' + str(
             set_file) +
@@ -561,13 +554,13 @@ def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
 
     elif set_file + '.eeg' not in f_list:
 
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: There is no %s file in this folder, skipping analysis!' % (
+        msg = '[%s %s]: There is no %s file in this folder, skipping analysis!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], set_file + '.eeg'))
+                :8], set_file + '.eeg')
 
-        # skipped = 1
+        print_msg(self, msg)
+
         error.append('\tThe "' + set_file +
                      '" \'.set\' file was not analyzed due to not having an \'.eeg\' file.\n')
         analyzable = False
@@ -575,20 +568,13 @@ def check_analyzable(self, sub_directory_fullpath, set_file, tet_list):
         # if .pos not in the f_list move the files to the missing associated file folder
     elif set_file + '.pos' not in f_list:
 
-        associated_files = [file for file in f_list if set_file in file]
-        missing_dir = os.path.join(sub_directory_fullpath, 'MissingAssociatedFiles')
-        if not os.path.exists(missing_dir):
-            os.makedirs(missing_dir)
-
-        for file in associated_files:
-            os.rename(os.path.join(sub_directory_fullpath, file), os.path.join(missing_dir, file))
-
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: There is no %s file in this folder, skipping analysis!' % (
+        msg = '[%s %s]: There is no %s file in this folder, skipping analysis!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], set_file + '.pos'))
-        # skipped = 1
+                :8], set_file + '.pos')
+
+        print_msg(self, msg)
+
         error.append('\tThe "' + set_file +
                      '" \'.set\' file was not analyzed due to not having a \'.pos\' file.\n')
         analyzable = False
@@ -610,7 +596,7 @@ def get_associated_files(file_list, set_filename):
     return [file for file in file_list if set_filename == os.path.splitext(file)[0]]
 
 
-def send_email(self, experimenter, error, sub_directory, processed_directory):
+def send_email(experimenter, error, sub_directory, processed_directory, self=None):
 
     smtpfile = os.path.join(self.SETTINGS_DIR, 'smtp.json')
     with open(smtpfile, 'r+') as filename:
@@ -685,7 +671,6 @@ def send_email(self, experimenter, error, sub_directory, processed_directory):
                         str(datetime.datetime.now().date()),
                         str(datetime.datetime.now().time())[
                         :8], experimenter))
-
             except:
                 if not toaddrs:
                     self.LogAppend.myGUI_signal_str.emit(

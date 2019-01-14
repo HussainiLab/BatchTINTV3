@@ -1,10 +1,11 @@
-import functools, sys, json, datetime, os, time
+import sys, json, datetime, os, time
 from PIL import Image
 from PyQt4 import QtCore, QtGui
-from core.utils import center, background, Worker
+from core.utils import center, background, Worker, find_consec
 from core.settings import Settings_Window
 from core.smtpSettings import SmtpSettings, AddExpter, add_Expter
 from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready, find_tetrodes, session_analyzable
+from core.ChooseDirectory import chooseDirectory
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
 
@@ -19,6 +20,9 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
         # self.setGeometry(50, 50, 500, 300)
         background(self)  # acquires some features from the background function we defined earlier
         self.setWindowTitle("BatchTINT - Main Window")  # sets the title of the window
+
+        self.numCores = str(os.cpu_count()) # initializing the number of cores the users CPU has
+
         self.current_session = ''
         self.current_subdirectory = ''
         self.LogAppend = Communicate()
@@ -89,10 +93,10 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
 
         self.choose_dir = QtGui.QPushButton('Choose Directory', self)  # creates the choose directory pushbutton
 
-        self.cur_dir = QtGui.QLineEdit()  # creates a line edit to display the chosen directory (current)
-        self.cur_dir.setText(current_directory_name)  # sets the text to the current directory
-        self.cur_dir.setAlignment(QtCore.Qt.AlignHCenter)  # centers the text
-        self.cur_dir.setToolTip('The current directory that Batch-Tint will analyze.')
+        self.current_directory = QtGui.QLineEdit()  # creates a line edit to display the chosen directory (current)
+        self.current_directory.setText(current_directory_name)  # sets the text to the current directory
+        self.current_directory.setAlignment(QtCore.Qt.AlignHCenter)  # centers the text
+        self.current_directory.setToolTip('The current directory that Batch-Tint will analyze.')
 
         # defines an attribute to exchange info between classes/modules
         self.current_directory_name = current_directory_name
@@ -136,32 +140,31 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
         queue_and_btn_layout.addLayout(queue_btn_layout)
 
         # ------------------------ multithreading widgets -------------------------------------
+        '''
+        self.multithread_cb = QtGui.QCheckBox('Multiprocessing')
+        self.multithread_cb.setToolTip('Check if you want to run multiple tetrodes simultaneously')
 
-        self.Multithread_cb = QtGui.QCheckBox('Multiprocessing')
-        self.Multithread_cb.setToolTip('Check if you want to run multiple tetrodes simultaneously')
-
+        
         core_num_l = QtGui.QLabel('Cores (#):')
         core_num_l.setToolTip('Generally the number of processes that multiprocessing should use is \n'
                               'equal to the number of cores your computer has.')
 
         self.core_num = QtGui.QLineEdit()
+        '''
 
         Multithread_l = QtGui.QLabel('Simultaneous Tetrodes (#):')
         Multithread_l.setToolTip('Input the number of tetrodes you want to analyze simultaneously')
 
-        self.Multithread = QtGui.QLineEdit()
+        self.numThreads = QtGui.QLineEdit()
 
         Multi_layout = QtGui.QHBoxLayout()
 
-        # for order in [self.Multithread_cb, core_num_l, self.core_num, Multithread_l, self.Multithread]:
-        for order in [Multithread_l, self.Multithread]:
+        # for order in [self.multithread_cb, core_num_l, self.core_num, Multithread_l, self.numThreads]:
+        for order in [Multithread_l, self.numThreads]:
             if 'Layout' in order.__str__():
                 Multi_layout.addLayout(order)
-                # Multi_layout.addStretch(1)
             else:
                 Multi_layout.addWidget(order, 0, QtCore.Qt.AlignCenter)
-                # Multi_layout.addWidget(order)
-                # Multi_layout.addStretch(1)
 
         checkbox_layout = QtGui.QHBoxLayout()
         checkbox_layout.addStretch(1)
@@ -175,22 +178,22 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
         try:
             with open(self.settings_fname, 'r+') as filename:
                 settings = json.load(filename)
-                self.core_num.setText(str(settings['Cores']))
-                self.Multithread.setText(str(settings['NumThreads']))
+                # self.core_num.setText(str(settings['Cores']))
+                self.numThreads.setText(str(settings['NumThreads']))
                 if settings['Silent'] == 1:
                     self.silent_cb.toggle()
-                if settings['Multi'] == 1:
-                    self.Multithread_cb.toggle()
-                if settings['Multi'] == 0:
-                    self.core_num.setDisabled(1)
+                # if settings['Multi'] == 1:
+                #    self.multithread_cb.toggle()
+                # if settings['Multi'] == 0:
+                #    self.core_num.setDisabled(1)
                 if settings['nonbatch'] == 1:
                     self.nonbatch_check.toggle
 
         except FileNotFoundError:
             self.silent_cb.toggle()
-            self.core_num.setDisabled(1)
-            self.core_num.setText('4')
-            self.Multithread.setText('1')
+            # self.core_num.setDisabled(1)
+            # self.core_num.setText('4')
+            self.numThreads.setText('1')
 
         # ------------- Log Box -------------------------
         self.Log = QtGui.QTextEdit()
@@ -214,7 +217,7 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
 
         layout1 = QtGui.QHBoxLayout()  # setting layout for the directory options
         layout1.addWidget(self.choose_dir)  # adding widgets to the first tab
-        layout1.addWidget(self.cur_dir)
+        layout1.addWidget(self.current_directory)
 
         btn_order = [self.klustabtn, self.setbtn, self.smtpbtn, quitbtn]  # defining button order (left to right)
         btn_layout = QtGui.QHBoxLayout()  # creating a widget to align the buttons
@@ -304,7 +307,7 @@ class Window(QtGui.QWidget):  # defines the window class (main window)
                                                        "You have not chosen a directory within Google Drive,\n"
                                                        "be aware that during testing we have experienced\n"
                                                        "permissions errors while using Google Drive directories\n"
-                                                       "that would result in BatchTINTV2 not being able to move\n"
+                                                       "that would result in BatchTINTV3 not being able to move\n"
                                                        "the files to the Processed folder (and stopping the GUI),\n"
                                                        "do you want to continue?",
                                                        QtGui.QMessageBox.Yes, QtGui.QMessageBox.No)
@@ -546,135 +549,6 @@ def find_keys(my_dictionary, value):
     return key
 
 
-def find_consec(data):
-    '''finds the consecutive numbers and outputs as a list'''
-    consecutive_values = []  # a list for the output
-    current_consecutive = [data[0]]
-
-    if len(data) == 1:
-        return [[data[0]]]
-
-    for index in range(1, len(data)):
-
-        if data[index] == data[index - 1] + 1:
-            current_consecutive.append(data[index])
-
-            if index == len(data) - 1:
-                consecutive_values.append(current_consecutive)
-
-        else:
-            consecutive_values.append(current_consecutive)
-            current_consecutive = [data[index]]
-
-            if index == len(data) - 1:
-                consecutive_values.append(current_consecutive)
-    return consecutive_values
-
-
-class Choose_Dir(QtGui.QWidget):
-
-    def __init__(self):
-        super(Choose_Dir, self).__init__()
-        background(self)
-        # deskW, deskH = background.Background(self)
-        width = self.deskW / 5
-        height = self.deskH / 5
-        self.setGeometry(0, 0, width, height)
-
-        with open(self.directory_settings, 'r+') as filename:
-            directory_data = json.load(filename)
-            current_directory_name = directory_data['directory']
-            if not os.path.exists(current_directory_name):
-                current_directory_name = 'No Directory Currently Chosen!'
-
-        self.setWindowTitle("BatchTINT - Choose Directory")
-
-        # ---------------- defining instructions -----------------
-        instr = QtGui.QLabel("For Batch Processing: choose the directory that contains subdirectories where these\n"
-                             "subdirectories contain all the session files (.set, .pos, .eeg, .N, etc.). Batch-Tint\n"
-                             "will iterate through each sub-directory and each session within those sub-directories.\n\n"
-                             "For Non-Batch: choose the directory that directly contains the contain all the session\n"
-                             "files (.set, .pos, .eeg, .N, etc.) and Batch-Tint will iterate through each session.\n")
-
-        # ----------------- buttons ----------------------------
-        self.dirbtn = QtGui.QPushButton('Choose Directory', self)
-        self.dirbtn.setToolTip('Click to choose a directory!')
-        # dirbtn.clicked.connect(self.new_dir)
-
-        cur_dir_t = QtGui.QLabel('Current Directory:')  # the label saying Current Directory
-        self.cur_dir_e = QtGui.QLineEdit() # the label that states the current directory
-        self.cur_dir_e.setText(current_directory_name)
-        self.cur_dir_e.setAlignment(QtCore.Qt.AlignHCenter)
-        self.current_directory_name = current_directory_name
-
-        self.backbtn = QtGui.QPushButton('Back', self)
-        self.applybtn = QtGui.QPushButton('Apply', self)
-
-
-        # ---------------- save checkbox -----------------------
-        self.save_cb = QtGui.QCheckBox('Leave Checked To Save Directory', self)
-        self.save_cb.toggle()
-        self.save_cb.stateChanged.connect(self.save_dir)
-
-        # ----------------- setting layout -----------------------
-
-        layout_dir = QtGui.QVBoxLayout()
-
-        layout_h1 = QtGui.QHBoxLayout()
-        layout_h1.addWidget(cur_dir_t)
-        layout_h1.addWidget(self.cur_dir_e)
-
-        layout_h2 = QtGui.QHBoxLayout()
-        layout_h2.addWidget(self.save_cb)
-
-        btn_layout = QtGui.QHBoxLayout()
-        btn_order = [self.dirbtn, self.applybtn, self.backbtn]
-
-        # btn_layout.addStretch(1)
-        for butn in btn_order:
-            btn_layout.addWidget(butn)
-            # btn_layout.addStretch(1)
-
-        layout_order = [instr, layout_h1, self.save_cb, btn_layout]
-
-        for order in layout_order:
-            if 'Layout' in order.__str__():
-                layout_dir.addLayout(order)
-            else:
-                layout_dir.addWidget(order, 0, QtCore.Qt.AlignCenter)
-
-        self.setLayout(layout_dir)
-
-        center(self)
-        # self.show()
-
-    def save_dir(self, state):
-        self.current_directory_name = str(self.cur_dir_e.text())
-        if state == QtCore.Qt.Checked:  # do this if the Check Box is checked
-            # print('checked')
-            with open(self.directory_settings, 'w') as filename:
-                directory_data = {'directory': self.current_directory_name}
-                json.dump(directory_data, filename)
-        else:
-            # print('unchecked')
-            pass
-
-    def apply_dir(self, main):
-        self.current_directory_name = str(self.cur_dir_e.text())
-        self.save_cb.checkState()
-
-        if self.save_cb.isChecked():  # do this if the Check Box is checked
-            self.save_dir(self.save_cb.checkState())
-        else:
-            pass
-
-        main.directory_queue.clear()
-        main.cur_dir.setText(self.current_directory_name)
-        main.current_directory_name = self.current_directory_name
-
-        self.backbtn.animateClick()
-
-
 @QtCore.pyqtSlot()
 def raise_window(new_window, old_window):
     """ raise the current window"""
@@ -712,7 +586,7 @@ def new_directory(self, main):
     """This method will look open a dialog and prompt the user to select a directory,"""
     current_directory_name = str(QtGui.QFileDialog.getExistingDirectory(self, "Select Directory"))
     self.current_directory_name = current_directory_name
-    self.cur_dir_e.setText(current_directory_name)
+    self.current_directory_e.setText(current_directory_name)
 
 
 def addSessions(self):
@@ -724,14 +598,14 @@ def addSessions(self):
     current_directory = self.current_directory_name
     if self.nonbatch == 0:
         # finds the sub directories within the chosen directory
-        sub_directories = [d for d in os.listdir(self.current_directory_name)
-                           if os.path.isdir(os.path.join(self.current_directory_name, d)) and
+        sub_directories = [d for d in os.listdir(current_directory)
+                           if os.path.isdir(os.path.join(current_directory, d)) and
                            d not in ['Processed', 'Converted']]  # finds the subdirectories within each folder
 
     else:
         # current_directory = os.path.dirname(self.current_directory_name)
+        sub_directories = [os.path.basename(current_directory)]
         current_directory = os.path.dirname(current_directory)
-        sub_directories = [os.path.basename(self.current_directory_name)]
 
     # find items already in the queue
     added_directories = []
@@ -792,8 +666,9 @@ def addSessions(self):
                     iterator += 1
 
                 for set_file in set_files:
+                    # find all the tetrodes for that set file
                     tetrodes = find_tetrodes(set_file, os.path.join(current_directory,
-                                                                    directory))  # find all the tetrodes for that set file
+                                                                    directory))
 
                     # check if all the tetrodes within that set file have been analyzed
                     analyzable = session_analyzable(os.path.join(current_directory, directory),
@@ -845,16 +720,12 @@ def addSessions(self):
                             self.directory_queue.addTopLevelItem(directory_item)
                 else:
                     pass
-                    #self.choice = ''
-                    #self.LogError.myGUI_signal_str.emit('NoSet')
-                    #while self.choice == '':
-                    #    time.sleep(0.5)
 
 
 def silent(self, state):
     with open(self.settings_fname, 'r+') as filename:
         settings = json.load(filename)
-        if state == True:
+        if state:
             settings['Silent'] = 1
         else:
             settings['Silent'] = 0
@@ -869,17 +740,19 @@ class Communicate(QtCore.QObject):
     myGUI_signal_QTreeWidgetItem = QtCore.pyqtSignal(QtGui.QTreeWidgetItem)
 
 
+'''
 def Multi(self, state):
     with open(self.settings_fname, 'r+') as filename:
         settings = json.load(filename)
-        if state == True:
+        if state:
             settings['Multi'] = 1
-            self.core_num.setEnabled(1)
+            # self.core_num.setEnabled(1)
         else:
             settings['Multi'] = 0
-            self.core_num.setDisabled(1)
+            # self.core_num.setDisabled(1)
     with open(self.settings_fname, 'w') as filename:
         json.dump(settings, filename)
+'''
 
 
 def nonbatch(self, state):
@@ -887,7 +760,7 @@ def nonbatch(self, state):
 
     with open(self.settings_fname, 'r+') as filename:
         settings = json.load(filename)
-        if state == True:
+        if state:
             settings['nonbatch'] = 1
             self.nonbatch = 1
         else:
@@ -899,24 +772,17 @@ def nonbatch(self, state):
 
 def BatchTint(main_window, directory):
     # ------- making a function that runs the entire GUI ----------
-    '''
-    def __init__(self, main_window, directory):
-        QtCore.QThread.__init__(self)
-        self.main_window = main_window
-        self.directory = directory
 
-    def __del__(self):
-        self.wait()
-
-    def run(self):
-    '''
+    with open(main_window.settings_fname, 'r+') as f:  # opens setting file
+        settings = json.load(f)  # loads settings
 
     # checks if the settings are appropriate to run analysis
-    klusta_ready = check_klusta_ready(main_window, directory)
+    klusta_ready = check_klusta_ready(settings, directory, self=main_window,
+                                      settings_filename=main_window.settings_fname,
+                                      numThreads=main_window.numThreads.text(),
+                                      numCores=main_window.numCores)
 
     if klusta_ready:
-
-        #addSessions(main_window)
 
         main_window.LogAppend.myGUI_signal_str.emit(
             '[%s %s]: Analyzing the following directory: %s!' % (str(datetime.datetime.now().date()),
@@ -957,8 +823,6 @@ def BatchTint(main_window, directory):
         # for sub_directory in sub_directories:  # finding all the folders within the directory
 
         while main_window.batch_tint:
-
-            #addSessions(main_window)
 
             main_window.directory_item = main_window.directory_queue.topLevelItem(0)
 
@@ -1010,18 +874,6 @@ def BatchTint(main_window, directory):
                     # main_window.directory_queue.takeTopLevelItem(0)
 
                 try:
-                    # adding the .rhd files to a list of session_files
-
-                    # set_file = [file for file in os.listdir(dir_new) if '.set' in file]  # finds the set file
-
-                    # if not set_file:  # if there is no set file it will return as an empty list
-                    #     # message saying no .set file
-                    #     main_window.LogAppend.myGUI_signal_str.emit(
-                    #         '[%s %s]: The following folder contains no analyzable \'.set\' files: %s' % (
-                    #             str(datetime.datetime.now().date()),
-                    #             str(datetime.datetime.now().time())[
-                    #             :8], str(sub_directory)))
-                    #     continue
 
                     # runs the function that will perform the klusta'ing
                     if not os.path.exists(os.path.join(directory, sub_directory)):
@@ -1032,7 +884,9 @@ def BatchTint(main_window, directory):
                         # main_window.directory_queue.takeTopLevelItem(0)
                         continue
                     else:
-                        klusta(main_window, sub_directory, directory)
+
+                        klusta(sub_directory, directory, settings, settings_filename=main_window.settings_fname,
+                               self=main_window)
 
                 except NotADirectoryError:
                     # if the file is not a directory it prints this message
@@ -1055,7 +909,6 @@ def RepeatAddSessions(main_window):
         pass
 
     while True:
-        #time.sleep(0.5)
         try:
             main_window.adding_session = True
             time.sleep(0.1)
@@ -1072,14 +925,14 @@ def run():
     app = QtGui.QApplication(sys.argv)
 
     main_w = Window()  # calling the main window
-    choose_dir_w = Choose_Dir()  # calling the Choose Directory Window
+    chooseDirectory_w = chooseDirectory()  # calling the Choose Directory Window
     settings_w = Settings_Window()  # calling the settings window
     smtp_setting_w = SmtpSettings()  # calling the smtp settings window
     add_exper = AddExpter()
 
     add_exper.addbtn.clicked.connect(lambda: add_Expter(add_exper, smtp_setting_w))
     # synchs the current directory on the main window
-    choose_dir_w.current_directory_name = main_w.current_directory_name
+    chooseDirectory_w.current_directory_name = main_w.current_directory_name
 
     main_w.raise_()  # making the main window on top
 
@@ -1089,16 +942,17 @@ def run():
     smtp_setting_w.addbtn.clicked.connect(lambda: raise_window(add_exper, smtp_setting_w))
 
     main_w.silent_cb.stateChanged.connect(lambda: silent(main_w, main_w.silent_cb.isChecked()))
-    main_w.Multithread_cb.stateChanged.connect(lambda: Multi(main_w, main_w.Multithread_cb.isChecked()))
+    # main_w.Multithread_cb.stateChanged.connect(lambda: Multi(main_w, main_w.Multithread_cb.isChecked()))
     main_w.nonbatch_check.stateChanged.connect(lambda: nonbatch(main_w, main_w.nonbatch_check.isChecked()))
     # brings the directory window to the foreground
-    main_w.choose_dir.clicked.connect(lambda: raise_window(choose_dir_w,main_w))
-    # main_w.choose_dir.clicked.connect(lambda: raise_window(choose_dir_w))
+    main_w.choose_dir.clicked.connect(lambda: raise_window(chooseDirectory_w,main_w))
+    # main_w.chooseDirectory.clicked.connect(lambda: raise_window(chooseDirectory_w))
 
     # brings the main window to the foreground
-    choose_dir_w.backbtn.clicked.connect(lambda: raise_window(main_w, choose_dir_w))
-    choose_dir_w.applybtn.clicked.connect(lambda: choose_dir_w.apply_dir(main_w))
-    # choose_dir_w.backbtn.clicked.connect(lambda: raise_window(main_w))  # brings the main window to the foreground
+    chooseDirectory_w.backbtn.clicked.connect(lambda: raise_window(main_w, chooseDirectory_w))
+    chooseDirectory_w.applybtn.clicked.connect(lambda: chooseDirectory_w.apply_dir(main_w))
+    # brings the main window to the foreground
+    # chooseDirectory_w.backbtn.clicked.connect(lambda: raise_window(main_w))
 
     main_w.setbtn.clicked.connect(lambda: raise_window(settings_w, main_w))
     # main_w.setbtn.clicked.connect(lambda: raise_window(settings_w))
@@ -1113,10 +967,12 @@ def run():
     settings_w.backbtn2.clicked.connect(lambda: raise_window(main_w, settings_w))
     # settings_w.backbtn2.clicked.connect(lambda: raise_window(main_w))
 
-    choose_dir_w.dirbtn.clicked.connect(lambda: new_directory(choose_dir_w, main_w))  # prompts the user to choose a directory
-    # choose_dir_w.dirbtn.clicked.connect(lambda: new_directory(choose_dir_w))  # prompts the user to choose a directory
+    # prompts the user to choose a directory
+    chooseDirectory_w.dirbtn.clicked.connect(lambda: new_directory(chooseDirectory_w, main_w))
+    # chooseDirectory_w.dirbtn.clicked.connect(lambda: new_directory(chooseDirectory_w))
 
     sys.exit(app.exec_())  # prevents the window from immediately exiting out
+
 
 if __name__ == "__main__":
     run()  # the command that calls run()

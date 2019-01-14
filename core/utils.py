@@ -49,3 +49,36 @@ class Worker(QtCore.QObject):
     @QtCore.pyqtSlot()
     def run(self):
         self.function(*self.args, **self.kwargs)
+
+
+def find_consec(data):
+    '''finds the consecutive numbers and outputs as a list'''
+    consecutive_values = []  # a list for the output
+    current_consecutive = [data[0]]
+
+    if len(data) == 1:
+        return [[data[0]]]
+
+    for index in range(1, len(data)):
+
+        if data[index] == data[index - 1] + 1:
+            current_consecutive.append(data[index])
+
+            if index == len(data) - 1:
+                consecutive_values.append(current_consecutive)
+
+        else:
+            consecutive_values.append(current_consecutive)
+            current_consecutive = [data[index]]
+
+            if index == len(data) - 1:
+                consecutive_values.append(current_consecutive)
+    return consecutive_values
+
+
+def print_msg(self, msg):
+
+    if self is None:
+        print(msg)
+    else:
+        self.LogAppend.myGUI_signal_str.emit(msg)
