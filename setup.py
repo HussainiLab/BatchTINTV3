@@ -1,18 +1,32 @@
-import sys
-from cx_Freeze import setup, Executable
+import setuptools
 
-# Dependencies are automatically detected, but it might need fine tuning.
-#build_exe_options = {"packages": ["os"], "excludes": ["tkinter"]}
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
-# GUI applications require a different base on Windows (the default is for a
-# console application).
-base = None
-if sys.platform == "win32":
-    base = "Win32GUI"
+pkgs = setuptools.find_packages()
+print('found these packages:', pkgs)
 
-setup(name="BatchTINTV3",
-      version="3.0",
-      description="This program uses Axona's command line interface to Batch spike sort .set files within a "
-      "user defined directory!",
-      #options={"build_exe": build_exe_options},
-      executables=[Executable("BatchSort.py", base=base)])
+pkg_name = "BatchTINTV3"
+
+setuptools.setup(
+    name=pkg_name,
+    version="3.0.8",
+    author="Geoffrey Barrett",
+    author_email="geoffrey.m.barrett@gmail.com",
+    description="BatchTINTV3 - GUI created to more efficiently sort Axona/Tint data.",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/HussainiLab/BatchTINTV3.git",
+    packages=pkgs,
+    install_requires=
+    [
+        'PyQt5',
+        'pillow',
+    ],
+    package_data={'BatchTINTV3': ['img/*.png']},
+    classifiers=[
+        "Programming Language :: Python :: 3.7 ",
+        "License :: OSI Approved :: GNU General Public License v3 (GPLv3) ",
+        "Operating System :: OS Independent",
+    ],
+)

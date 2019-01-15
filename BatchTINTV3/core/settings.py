@@ -1,10 +1,10 @@
-from PyQt4 import QtGui, QtCore
+from PyQt5 import QtCore, QtWidgets
 import functools, json
+import os
 from core.utils import center, background
 
 
-class Settings_Window(QtGui.QTabWidget):
-
+class Settings_Window(QtWidgets.QTabWidget):
     def __init__(self):
         super(Settings_Window, self).__init__()
         self.Settings()
@@ -21,8 +21,8 @@ class Settings_Window(QtGui.QTabWidget):
                        'ChangedThresh': 0.05, 'MaxIter': 500, 'SplitEvery': 40,
                        'FullStepEvery': 20, 'Subset': 1}
 
-        tab1 = QtGui.QWidget()  # creates the basic tab
-        tab2 = QtGui.QWidget()  # creates the advanced tab
+        tab1 = QtWidgets.QWidget()  # creates the basic tab
+        tab2 = QtWidgets.QWidget()  # creates the advanced tab
 
         background(self)
         # deskW, deskH = background.Background(self)
@@ -30,21 +30,11 @@ class Settings_Window(QtGui.QTabWidget):
 
         self.addTab(tab1, 'Basic')
         self.addTab(tab2, 'Advanced')
-        # -------------------- number of tetrodes ---------------------
-
-        #num_tet_l = QtGui.QLabel('Number of Tetrodes')
-        #self.num_tet = QtGui.QLineEdit()
-        #self.num_tet.setToolTip('The maximum number of tetrodes in your directory folders.')
-
-        #num_tet_lay = QtGui.QHBoxLayout()
-        #num_tet_lay.addWidget(num_tet_l)
-        ## num_tet_lay.addStretch('1')
-        #num_tet_lay.addWidget(self.num_tet)
 
         # ------------------ clustering features --------------------------------
-        clust_l = QtGui.QLabel('Clustering Features:')
+        clust_l = QtWidgets.QLabel('Clustering Features:')
 
-        grid_ft = QtGui.QGridLayout()
+        grid_ft = QtWidgets.QGridLayout()
 
         self.clust_ft_names = ['PC1', 'PC2', 'PC3', 'PC4',
                                'A', 'Vt', 'P', 'T',
@@ -63,26 +53,26 @@ class Settings_Window(QtGui.QTabWidget):
             if clust_ft_name == '':
                 continue
             self.position[clust_ft_name] = position
-            self.clust_ft_cbs[position] = QtGui.QCheckBox(clust_ft_name)
+            self.clust_ft_cbs[position] = QtWidgets.QCheckBox(clust_ft_name)
             grid_ft.addWidget(self.clust_ft_cbs[position], *position)
             self.clust_ft_cbs[position].stateChanged.connect(
                 functools.partial(self.channel_feats, clust_ft_name, position))
 
         # self.clust_ft_cbs.toggle()
 
-        clust_feat_lay = QtGui.QHBoxLayout()
+        clust_feat_lay = QtWidgets.QHBoxLayout()
         clust_feat_lay.addWidget(clust_l)
         clust_feat_lay.addLayout(grid_ft)
 
         # -------------------------- reporting checkboxes ---------------------------------------
 
-        report_l = QtGui.QLabel('Reporting Options:')
+        report_l = QtWidgets.QLabel('Reporting Options:')
 
         self.report = ['Verbose', 'Screen', 'Log File']
 
         self.report_cbs = {}
 
-        grid_report = QtGui.QGridLayout()
+        grid_report = QtWidgets.QGridLayout()
 
         positions = [(i, j) for i in range(1) for j in range(4)]
 
@@ -91,20 +81,20 @@ class Settings_Window(QtGui.QTabWidget):
             if option == '':
                 continue
             self.position[option] = position
-            self.report_cbs[position] = QtGui.QCheckBox(option)
+            self.report_cbs[position] = QtWidgets.QCheckBox(option)
             grid_report.addWidget(self.report_cbs[position], *position)
             self.report_cbs[position].stateChanged.connect(
                 functools.partial(self.reporting_options, option, position))
 
-        grid_lay = QtGui.QHBoxLayout()
+        grid_lay = QtWidgets.QHBoxLayout()
         grid_lay.addWidget(report_l)
         grid_lay.addLayout(grid_report)
 
         # --------------------------Channels to Include-------------------------------------------
 
-        chan_inc = QtGui.QLabel('Channels to Include:')
+        chan_inc = QtWidgets.QLabel('Channels to Include:')
 
-        grid_chan = QtGui.QGridLayout()
+        grid_chan = QtWidgets.QGridLayout()
         self.chan_names = ['1', '2', '3', '4']
 
         for chan in self.chan_names:
@@ -119,135 +109,111 @@ class Settings_Window(QtGui.QTabWidget):
             if chan_name == '':
                 continue
             self.position[chan_name] = position
-            self.chan_inc_cbs[position] = QtGui.QCheckBox(chan_name)
+            self.chan_inc_cbs[position] = QtWidgets.QCheckBox(chan_name)
             grid_chan.addWidget(self.chan_inc_cbs[position], *position)
             self.chan_inc_cbs[position].stateChanged.connect(
                 functools.partial(self.channel_include, chan_name, position))
             self.chan_inc_cbs[position].setToolTip('Include channel ' + str(chan_name) + ' in the analysis.')
 
-        chan_name_lay = QtGui.QHBoxLayout()
+        chan_name_lay = QtWidgets.QHBoxLayout()
         chan_name_lay.addWidget(chan_inc)
         chan_name_lay.addLayout(grid_chan)
 
-        # --------------------------basic lay doublespinbox------------------------------------------------
-        '''
-        max_clust_l = QtGui.QLabel('Maximum Clusters: ')
-        min_clust_l = QtGui.QLabel('Minimum Clusters: ')
-        max_clust = QtGui.QDoubleSpinBox()
-        min_clust = QtGui.QDoubleSpinBox()
-
-        clust_maxmin_order = [min_clust_l, min_clust, max_clust_l, max_clust]
-        clust_maxmin_lay = QtGui.QHBoxLayout()
-
-        for order in clust_maxmin_order:
-            clust_maxmin_lay.addWidget(order, 0, QtCore.Qt.AlignCenter)
-            clust_maxmin_lay.addStretch(1)
-        '''
         # --------------------------adv lay doublespinbox------------------------------------------------
 
-        row1 = QtGui.QHBoxLayout()
-        row2 = QtGui.QHBoxLayout()
-        row3 = QtGui.QHBoxLayout()
-        row4 = QtGui.QHBoxLayout()
-        row5 = QtGui.QHBoxLayout()
-        row6 = QtGui.QHBoxLayout()
+        row1 = QtWidgets.QHBoxLayout()
+        row2 = QtWidgets.QHBoxLayout()
+        row3 = QtWidgets.QHBoxLayout()
+        row4 = QtWidgets.QHBoxLayout()
+        row5 = QtWidgets.QHBoxLayout()
+        row6 = QtWidgets.QHBoxLayout()
 
-        maxposclust_l = QtGui.QLabel('MaxPossibleClusters: ')
-        self.maxpos = QtGui.QLineEdit()
+        maxposclust_l = QtWidgets.QLabel('MaxPossibleClusters: ')
+        self.maxpos = QtWidgets.QLineEdit()
 
-        chThresh_l = QtGui.QLabel('ChangedThresh: ')
-        self.chThresh = QtGui.QLineEdit()
+        chThresh_l = QtWidgets.QLabel('ChangedThresh: ')
+        self.chThresh = QtWidgets.QLineEdit()
 
-        nStarts_l = QtGui.QLabel('nStarts: ')
-        self.nStarts = QtGui.QLineEdit()
+        nStarts_l = QtWidgets.QLabel('nStarts: ')
+        self.nStarts = QtWidgets.QLineEdit()
 
-        MaxIter_l = QtGui.QLabel('MaxIter: ')
-        self.Maxiter = QtGui.QLineEdit()
+        MaxIter_l = QtWidgets.QLabel('MaxIter: ')
+        self.Maxiter = QtWidgets.QLineEdit()
 
-        RandomSeed_l = QtGui.QLabel('RandomSeed: ')
-        self.RandomSeed = QtGui.QLineEdit()
+        RandomSeed_l = QtWidgets.QLabel('RandomSeed: ')
+        self.RandomSeed = QtWidgets.QLineEdit()
 
-        SplitEvery_l = QtGui.QLabel('SplitEvery: ')
-        self.SplitEvery = QtGui.QLineEdit()
+        SplitEvery_l = QtWidgets.QLabel('SplitEvery: ')
+        self.SplitEvery = QtWidgets.QLineEdit()
 
-        DistThresh_l = QtGui.QLabel('DistThresh: ')
-        self.DistThresh = QtGui.QLineEdit()
+        DistThresh_l = QtWidgets.QLabel('DistThresh: ')
+        self.DistThresh = QtWidgets.QLineEdit()
 
-        FullStepEvery_l  = QtGui.QLabel('FullStepEvery: ')
-        self.FullStepEvery = QtGui.QLineEdit()
+        FullStepEvery_l  = QtWidgets.QLabel('FullStepEvery: ')
+        self.FullStepEvery = QtWidgets.QLineEdit()
 
-        PenaltyK_l = QtGui.QLabel('PenaltyK: ')
-        self.PenaltyK = QtGui.QLineEdit()
+        PenaltyK_l = QtWidgets.QLabel('PenaltyK: ')
+        self.PenaltyK = QtWidgets.QLineEdit()
 
-        Subset_l = QtGui.QLabel('Subset: ')
-        self.Subset = QtGui.QLineEdit()
+        Subset_l = QtWidgets.QLabel('Subset: ')
+        self.Subset = QtWidgets.QLineEdit()
 
-        PenaltyKLogN_l = QtGui.QLabel('PenaltyKLogN: ')
-        self.PenaltyKLogN = QtGui.QLineEdit()
+        PenaltyKLogN_l = QtWidgets.QLabel('PenaltyKLogN: ')
+        self.PenaltyKLogN = QtWidgets.QLineEdit()
 
         row1order = [maxposclust_l, self.maxpos, chThresh_l, self.chThresh]
         for order in row1order:
             row1.addWidget(order)
-            # row1.addStretch(1)
 
         row2order = [nStarts_l, self.nStarts, MaxIter_l, self.Maxiter]
         for order in row2order:
             row2.addWidget(order)
-            # row2.addStretch(1)
 
         row3order = [RandomSeed_l, self.RandomSeed, SplitEvery_l, self.SplitEvery]
         for order in row3order:
             row3.addWidget(order)
-            # row3.addStretch(1)
 
         row4order = [DistThresh_l, self.DistThresh, FullStepEvery_l, self.FullStepEvery]
         for order in row4order:
             row4.addWidget(order)
-            # row4.addStretch(1)
 
         row5order = [PenaltyK_l, self.PenaltyK, Subset_l, self.Subset]
         for order in row5order:
             row5.addWidget(order)
-            # row5.addStretch(1)
 
         row6order = [PenaltyKLogN_l, self.PenaltyKLogN]
         for order in row6order:
             row6.addWidget(order)
-            # row6.addStretch(1)
 
         # ------------------------ buttons ----------------------------------------------------
-        self.basicdefaultbtn = QtGui.QPushButton("Default", tab1)
+        self.basicdefaultbtn = QtWidgets.QPushButton("Default", tab1)
         self.basicdefaultbtn.clicked.connect(self.basic_default)
-        self.advanceddefaultbtn = QtGui.QPushButton("Default", tab2)
+        self.advanceddefaultbtn = QtWidgets.QPushButton("Default", tab2)
         self.advanceddefaultbtn.clicked.connect(self.adv_default)
 
-        self.backbtn = QtGui.QPushButton('Back', tab1)
+        self.backbtn = QtWidgets.QPushButton('Back', tab1)
 
-        self.backbtn2 = QtGui.QPushButton('Back', tab2)
+        self.backbtn2 = QtWidgets.QPushButton('Back', tab2)
 
-        self.apply_tab1btn = QtGui.QPushButton('Apply', tab1)
+        self.apply_tab1btn = QtWidgets.QPushButton('Apply', tab1)
         self.apply_tab1btn.clicked.connect(self.apply_tab1)
 
-        self.apply_tab2btn = QtGui.QPushButton('Apply',tab2)
+        self.apply_tab2btn = QtWidgets.QPushButton('Apply',tab2)
         self.apply_tab2btn.clicked.connect(self.apply_tab2)
 
         basic_butn_order = [self.apply_tab1btn, self.basicdefaultbtn, self.backbtn]
-        basic_butn_lay = QtGui.QHBoxLayout()
+        basic_butn_lay = QtWidgets.QHBoxLayout()
         for order in basic_butn_order:
             basic_butn_lay.addWidget(order, 0, QtCore.Qt.AlignCenter)
-            # basic_butn_lay.addStretch(1)
 
         adv_butn_order = [self.apply_tab2btn, self.advanceddefaultbtn, self.backbtn2]
-        adv_butn_lay = QtGui.QHBoxLayout()
+        adv_butn_lay = QtWidgets.QHBoxLayout()
         for order in adv_butn_order:
             adv_butn_lay.addWidget(order, 0, QtCore.Qt.AlignCenter)
-            # adv_butn_lay.addStretch(1)
 
         # -------------------------- layouts ----------------------------------------------------
-
-        # basic_lay_order = [chan_name_lay, clust_feat_lay, clust_maxmin_lay, basic_butn_lay]
         basic_lay_order = [chan_name_lay, clust_feat_lay, grid_lay, basic_butn_lay]
-        basic_lay = QtGui.QVBoxLayout()
+        basic_lay = QtWidgets.QVBoxLayout()
 
         # basic_lay.addStretch(1)
         for order in basic_lay_order:
@@ -261,7 +227,7 @@ class Settings_Window(QtGui.QTabWidget):
         tab1.setLayout(basic_lay)
 
         adv_lay_order = [row1, row2, row3, row4, row5, row6, adv_butn_lay]
-        adv_lay = QtGui.QVBoxLayout()
+        adv_lay = QtWidgets.QVBoxLayout()
 
         # basic_lay.addStretch(1)
         for order in adv_lay_order:
@@ -328,17 +294,13 @@ class Settings_Window(QtGui.QTabWidget):
                 for dictionary in [self.default_adv, self.default_set_feats, self.default_set_channels_inc, self.default_reporting]:
                     self.settings.update(dictionary)
 
-                default_set_feats = []
-                default_reporting = []
-                default_set_channels_inc = []
-
-                # self.settings['NumTet'] = '8'
                 self.settings['NumFet'] = 3
                 self.settings['Silent'] = 1
                 self.settings['Multi'] = 0
                 self.settings['UseFeatures'] = '1111111111111'
                 self.settings['NumThreads'] = 1
-                self.settings['Cores'] = 4
+                self.settings['Cores'] = os.cpu_count()
+                self.settings['nonbatch'] = 0
 
                 json.dump(self.settings, filename)  # save the default values to this file
 
@@ -353,7 +315,6 @@ class Settings_Window(QtGui.QTabWidget):
                 self.SplitEvery.setText(str(self.settings['SplitEvery']))
                 self.FullStepEvery.setText(str(self.settings['FullStepEvery']))
                 self.Subset.setText(str(self.settings['Subset']))
-                # self.num_tet.setText(str(self.settings['NumTet']))
 
                 for name in self.chan_names:
                     if self.settings[name] == 1:
@@ -368,7 +329,6 @@ class Settings_Window(QtGui.QTabWidget):
                     if int(self.settings[option]) == 1:
                         self.report_cbs[self.position[option]].toggle()
         center(self)
-        # self.show()
 
     def reporting_options(self, option, position):
         if self.report_cbs[position].isChecked():
@@ -406,21 +366,9 @@ class Settings_Window(QtGui.QTabWidget):
 
     def basic_default(self):
         """Sets the Basic Settings to their Default Values"""
-        default_set_feats = {}
-        default_set_feats['PC1'] = 1
-        default_set_feats['PC2'] = 1
-        default_set_feats['PC3'] = 1
-
-        default_set_channels_inc = {}
-        default_set_channels_inc['1'] = 1
-        default_set_channels_inc['2'] = 1
-        default_set_channels_inc['3'] = 1
-        default_set_channels_inc['4'] = 1
-
-        default_reporting = {}
-        default_reporting['Verbose'] = 1
-        default_reporting['Screen'] = 1
-        default_reporting['Log File'] = 1
+        default_set_feats = {'PC1': 1, 'PC2': 1, 'PC3': 1}
+        default_set_channels_inc = {'1': 1, '2': 1, '3': 1, '4': 1}
+        default_reporting = {'Verbose': 1, 'Screen': 1, 'Log File': 1}
 
         for name in self.chan_names:
             default_keys = list(default_set_channels_inc.keys())
@@ -443,8 +391,6 @@ class Settings_Window(QtGui.QTabWidget):
                 self.report_cbs[self.position[option]].toggle()
             elif option not in default_keys and self.report_cbs[self.position[option]].isChecked() == True:
                 self.report_cbs[self.position[option]].toggle()
-
-        # self.num_tet.setText('8')
 
         self.apply_tab1btn.animateClick()
 
@@ -476,7 +422,6 @@ class Settings_Window(QtGui.QTabWidget):
             feat_inc = [feat for feat in self.clust_ft_names if self.settings[feat] == 1]
 
             UseFeat = ''
-            # start_feat = 1
             for i in range(len(self.chan_names)):
                 for j in range(len(feat_inc)):
                     if str(i+1) in chan_inc:
@@ -486,7 +431,6 @@ class Settings_Window(QtGui.QTabWidget):
             UseFeat += '1'
 
             self.settings['NumFet'] = len(feat_inc)
-            # self.settings['NumTet'] = str(self.num_tet.text())
             self.settings['UseFeatures'] = UseFeat
 
             self.backbtn.animateClick()
@@ -495,21 +439,21 @@ class Settings_Window(QtGui.QTabWidget):
             json.dump(self.settings, filename)  # save the default values to this file
 
     def apply_tab2(self):
-        with open(self.settings_fname, 'r+') as filename:
 
-            self.settings['MaxPos'] = self.maxpos.text()
-            self.settings['nStarts'] = self.nStarts.text()
-            self.settings['RandomSeed'] = self.RandomSeed.text()
-            self.settings['DistThresh'] = self.DistThresh.text()
-            self.settings['PenaltyK'] = self.PenaltyK.text()
-            self.settings['PenaltyKLogN'] = self.PenaltyKLogN.text()
-            self.settings['ChangedThresh'] = self.chThresh.text()
-            self.settings['MaxIter'] = self.Maxiter.text()
-            self.settings['SplitEvery'] = self.SplitEvery.text()
-            self.settings['FullStepEvery'] = self.FullStepEvery.text()
-            self.settings['Subset'] = self.Subset.text()
+        self.settings['MaxPos'] = self.maxpos.text()
+        self.settings['nStarts'] = self.nStarts.text()
+        self.settings['RandomSeed'] = self.RandomSeed.text()
+        self.settings['DistThresh'] = self.DistThresh.text()
+        self.settings['PenaltyK'] = self.PenaltyK.text()
+        self.settings['PenaltyKLogN'] = self.PenaltyKLogN.text()
+        self.settings['ChangedThresh'] = self.chThresh.text()
+        self.settings['MaxIter'] = self.Maxiter.text()
+        self.settings['SplitEvery'] = self.SplitEvery.text()
+        self.settings['FullStepEvery'] = self.FullStepEvery.text()
+        self.settings['Subset'] = self.Subset.text()
 
-            self.backbtn2.animateClick()
+        self.backbtn2.animateClick()
+
         with open(self.settings_fname, 'w') as filename:
             json.dump(self.settings, filename)  # save the default values to this file
 

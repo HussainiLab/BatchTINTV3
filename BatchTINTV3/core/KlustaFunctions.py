@@ -1,7 +1,7 @@
 # import os, read_data, json, subprocess
 import os, json, subprocess, time, datetime, queue, threading, smtplib, shutil
 from distutils.dir_util import copy_tree
-from PyQt4 import QtGui
+from PyQt5 import QtWidgets
 # from multiprocessing.dummy import Pool as ThreadPool
 # from email.mime.text import MIMEText
 from core.utils import print_msg
@@ -478,9 +478,9 @@ def check_klusta_ready(settings, directory, self=None, settings_filename=None, n
             while self.choice == '':
                 time.sleep(1)
 
-            if self.choice == QtGui.QMessageBox.No:
+            if self.choice == QtWidgets.QMessageBox.No:
                 klusta_ready = False
-            elif self.choice == QtGui.QMessageBox.Yes:
+            elif self.choice == QtWidgets.QMessageBox.Yes:
                 klusta_ready = True
         else:
             print("You have chosen more than four features. clustering will take a long time!")
@@ -493,7 +493,7 @@ def check_klusta_ready(settings, directory, self=None, settings_filename=None, n
             while self.choice == '':
                 time.sleep(1)
 
-            if self.choice == QtGui.QMessageBox.Ok:
+            if self.choice == QtWidgets.QMessageBox.Ok:
                 return False
 
     if 'Google Drive' in directory:
@@ -503,9 +503,9 @@ def check_klusta_ready(settings, directory, self=None, settings_filename=None, n
             while self.choice == '':
                 time.sleep(1)
 
-            if self.choice == QtGui.QMessageBox.Yes:
+            if self.choice == QtWidgets.QMessageBox.Yes:
                 klusta_ready = True
-            elif self.choice == QtGui.QMessageBox.No:
+            elif self.choice == QtWidgets.QMessageBox.No:
                 klusta_ready = False
 
     return klusta_ready
