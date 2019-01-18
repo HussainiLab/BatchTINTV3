@@ -590,7 +590,7 @@ def addSessions(self):
         # pauses add Sessions when the individual is reordering
         time.sleep(0.1)
 
-    current_directory = self.current_directory_name
+    current_directory = os.path.realpath(self.current_directory_name)
     if self.nonbatch == 0:
         # finds the sub directories within the chosen directory
         sub_directories = [d for d in os.listdir(current_directory)
