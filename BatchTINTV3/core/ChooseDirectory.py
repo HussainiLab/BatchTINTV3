@@ -34,7 +34,7 @@ class chooseDirectory(QtWidgets.QWidget):
         # dirbtn.clicked.connect(self.new_dir)
 
         cur_dir_t = QtWidgets.QLabel('Current Directory:')  # the label saying Current Directory
-        self.current_directory_e = QtWidgets.QLineEdit() # the label that states the current directory
+        self.current_directory_e = QtWidgets.QLineEdit()  # the label that states the current directory
         self.current_directory_e.setText(current_directory_name)
         self.current_directory_e.setAlignment(QtCore.Qt.AlignHCenter)
         self.current_directory_name = current_directory_name
@@ -95,8 +95,8 @@ class chooseDirectory(QtWidgets.QWidget):
         else:
             pass
 
-        main.directory_queue.clear()
+        # main.directory_queue.clear()
         main.current_directory.setText(self.current_directory_name)
-        main.current_directory_name = self.current_directory_name
+        # main.current_directory_name = self.current_directory_name
 
         self.backbtn.animateClick()

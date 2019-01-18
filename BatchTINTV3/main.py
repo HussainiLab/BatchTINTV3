@@ -23,6 +23,9 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
         self.numCores = str(os.cpu_count())  # initializing the number of cores the users CPU has
 
+        self.reset_add_thread = False
+        self.repeat_thread_active = False
+
         self.current_session = ''
         self.current_subdirectory = ''
         self.LogAppend = Communicate()
@@ -94,6 +97,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.choose_dir = QtWidgets.QPushButton('Choose Directory', self)  # creates the choose directory pushbutton
 
         self.current_directory = QtWidgets.QLineEdit()  # creates a line edit to display the chosen directory (current)
+        self.current_directory.textChanged.connect(self.change_directory)
         self.current_directory.setText(current_directory_name)  # sets the text to the current directory
         self.current_directory.setAlignment(QtCore.Qt.AlignHCenter)  # centers the text
         self.current_directory.setToolTip('The current directory that Batch-Tint will analyze.')
@@ -192,7 +196,8 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         except:
             mod_date = time.ctime(os.path.getmtime(os.path.join(self.PROJECT_DIR, "BatchSort.exe")))
 
-        vers_label = QtWidgets.QLabel("BatchTINT V3.0 - Last Updated: " + mod_date)  # creates a label with that information
+        # creates a label with that information
+        vers_label = QtWidgets.QLabel("BatchTINT V3.0 - Last Updated: " + mod_date)
 
         # ------------------- page layout ----------------------------------------
         layout = QtWidgets.QVBoxLayout()  # setting the layout
@@ -308,8 +313,10 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
                                                      QtWidgets.QMessageBox.Ok)
 
     def AppendLog(self, message):
-        '''A function that will append the Log field of the main window (mainly
-        used as a slot for a custom pyqt signal)'''
+        """
+        A function that will append the Log field of the main window (mainly
+        used as a slot for a custom pyqt signal)
+        """
         self.Log.append(message)
 
     def stopBatch(self):
@@ -325,6 +332,38 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.klustabtn.setText('Run')
         self.klustabtn.setToolTip(
             'Click to perform batch analysis via Tint and KlustaKwik!')  # defining the tool tip for the start button
+
+    def change_directory(self):
+        """
+        Whenever directory is changed, clear the directory queue
+        """
+        self.current_directory_name = self.current_directory.text()
+
+        try:
+            self.directory_queue.clear()
+        except AttributeError:
+            pass
+
+        self.restart_add_sessions_thread()
+
+    def restart_add_sessions_thread(self):
+
+        self.reset_add_thread = True
+
+        if not hasattr(self, 'repeat_thread_active'):
+            return
+
+        while self.repeat_thread_active:
+            time.sleep(0.1)
+
+        # self.reset_add_thread = False
+        self.RepeatAddSessionsThread = QtCore.QThread()
+        self.RepeatAddSessionsThread.setTerminationEnabled(True)
+        self.RepeatAddSessionsThread.start()
+
+        self.RepeatAddSessionsWorker = Worker(RepeatAddSessions, self)
+        self.RepeatAddSessionsWorker.moveToThread(self.RepeatAddSessionsThread)
+        self.RepeatAddSessionsWorker.start.emit("start")
 
     def moveQueue(self, direction):
         """This method is not threaded"""
@@ -542,7 +581,6 @@ def cancel_window(new_window, old_window):
 def new_directory(self, main):
     """This method will look open a dialog and prompt the user to select a directory,"""
     current_directory_name = str(QtWidgets.QFileDialog.getExistingDirectory(self, "Select Directory"))
-    self.current_directory_name = current_directory_name
     self.current_directory_e.setText(current_directory_name)
 
 
@@ -689,6 +727,7 @@ class Communicate(QtCore.QObject):
 
 def nonbatch(self, state):
     self.directory_queue.clear()
+    self.restart_add_sessions_thread()
 
     with open(self.settings_fname, 'r+') as filename:
         settings = json.load(filename)
@@ -823,6 +862,9 @@ def runGUI(main_window, directory):
 
 
 def RepeatAddSessions(main_window):
+
+    main_window.repeat_thread_active = True
+
     try:
         main_window.adding_session = True
         addSessions(main_window)
@@ -833,6 +875,12 @@ def RepeatAddSessions(main_window):
         pass
 
     while True:
+
+        if main_window.reset_add_thread:
+            main_window.repeat_thread_active = False
+            main_window.reset_add_thread = False
+            return
+
         try:
             main_window.adding_session = True
             time.sleep(0.1)
