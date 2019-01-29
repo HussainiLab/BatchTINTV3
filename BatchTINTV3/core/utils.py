@@ -1,6 +1,7 @@
 from PyQt5 import QtGui, QtCore, QtWidgets
 import os
 import sys
+import time
 
 project_name = 'BatchTINTV3'
 
@@ -91,3 +92,45 @@ def print_msg(self, msg):
         print(msg)
     else:
         self.LogAppend.myGUI_signal_str.emit(msg)
+
+
+def find_keys(my_dictionary, value):
+    """finds a key for a given value of a dictionary"""
+    key = []
+    if not isinstance(value, list):
+        value = [value]
+    [key.append(list(my_dictionary.keys())[list(my_dictionary.values()).index(val)]) for val in value]
+    return key
+
+
+@QtCore.pyqtSlot()
+def raise_window(new_window, old_window):
+    """ raise the current window"""
+    if 'Choose' in str(new_window):
+        new_window.raise_()
+        new_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+        new_window.show()
+        time.sleep(0.1)
+
+    elif "Choose" in str(old_window):
+        time.sleep(0.1)
+        old_window.hide()
+        return
+    else:
+        new_window.raise_()
+        new_window.show()
+        time.sleep(0.1)
+        old_window.hide()
+
+
+@QtCore.pyqtSlot()
+def cancel_window(new_window, old_window):
+    """ raise the current window"""
+    new_window.raise_()
+    new_window.show()
+    time.sleep(0.1)
+    old_window.hide()
+
+    if 'SmtpSettings' in str(new_window) and 'AddExpter' in str(old_window): # needs to clear the text files
+        old_window.expter_edit.setText('')
+        old_window.email_edit.setText('')

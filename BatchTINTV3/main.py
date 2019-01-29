@@ -1,11 +1,12 @@
 import sys, json, datetime, os, time
 from PIL import Image
 from PyQt5 import QtCore, QtGui, QtWidgets
-from core.utils import center, background, Worker, find_consec
+from core.utils import center, background, Worker, find_consec, raise_window, cancel_window, find_keys
 from core.settings import Settings_Window
 from core.smtpSettings import SmtpSettings, AddExpter, add_Expter
 from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready, find_tetrodes, session_analyzable
 from core.ChooseDirectory import chooseDirectory
+from core.addSessions import RepeatAddSessions
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
 
@@ -353,8 +354,11 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         if not hasattr(self, 'repeat_thread_active'):
             return
 
-        while self.repeat_thread_active:
-            time.sleep(0.1)
+        # while self.repeat_thread_active:
+        #     time.sleep(0.1)
+
+        if hasattr(self, 'RepeatAddSessionsThread'):
+            self.RepeatAddSessionsThread.terminate()
 
         # self.reset_add_thread = False
         self.RepeatAddSessionsThread = QtCore.QThread()
@@ -536,175 +540,10 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.child_removed = True
 
 
-def find_keys(my_dictionary, value):
-    """finds a key for a given value of a dictionary"""
-    key = []
-    if not isinstance(value, list):
-        value = [value]
-    [key.append(list(my_dictionary.keys())[list(my_dictionary.values()).index(val)]) for val in value]
-    return key
-
-
-@QtCore.pyqtSlot()
-def raise_window(new_window, old_window):
-    """ raise the current window"""
-    if 'Choose' in str(new_window):
-        new_window.raise_()
-        new_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        new_window.show()
-        time.sleep(0.1)
-
-    elif "Choose" in str(old_window):
-        time.sleep(0.1)
-        old_window.hide()
-        return
-    else:
-        new_window.raise_()
-        new_window.show()
-        time.sleep(0.1)
-        old_window.hide()
-
-
-@QtCore.pyqtSlot()
-def cancel_window(new_window, old_window):
-    """ raise the current window"""
-    new_window.raise_()
-    new_window.show()
-    time.sleep(0.1)
-    old_window.hide()
-
-    if 'SmtpSettings' in str(new_window) and 'AddExpter' in str(old_window): # needs to clear the text files
-        old_window.expter_edit.setText('')
-        old_window.email_edit.setText('')
-
-
 def new_directory(self, main):
     """This method will look open a dialog and prompt the user to select a directory,"""
     current_directory_name = str(QtWidgets.QFileDialog.getExistingDirectory(self, "Select Directory"))
     self.current_directory_e.setText(current_directory_name)
-
-
-def addSessions(self):
-
-    while self.reordering_queue:
-        # pauses add Sessions when the individual is reordering
-        time.sleep(0.1)
-
-    current_directory = os.path.realpath(self.current_directory_name)
-    if self.nonbatch == 0:
-        # finds the sub directories within the chosen directory
-        sub_directories = [d for d in os.listdir(current_directory)
-                           if os.path.isdir(os.path.join(current_directory, d)) and
-                           d not in ['Processed', 'Converted']]  # finds the subdirectories within each folder
-
-    else:
-        # current_directory = os.path.dirname(self.current_directory_name)
-        sub_directories = [os.path.basename(current_directory)]
-        current_directory = os.path.dirname(current_directory)
-
-    # find items already in the queue
-    added_directories = []
-
-    # iterating through queue items
-    iterator = QtWidgets.QTreeWidgetItemIterator(self.directory_queue)
-    while iterator.value():
-        directory_item = iterator.value()
-
-        # check if directory still exists
-        if not os.path.exists(os.path.join(current_directory, directory_item.data(0, 0))) and \
-                        '.set' not in directory_item.data(0, 0):
-            # then remove from the list since it doesn't exist anymore
-            root = self.directory_queue.invisibleRootItem()
-            for child_index in range(root.childCount()):
-                if root.child(child_index) == directory_item:
-                    self.RemoveChildItem.myGUI_signal_QTreeWidgetItem.emit(directory_item)
-                    # root.removeChild(directory_item)
-        else:
-            added_directories.append(directory_item.data(0, 0))
-
-        iterator += 1
-
-    for directory in sub_directories:
-
-        try:
-            set_files = [file for file in os.listdir(os.path.join(current_directory, directory))
-                         if '.set' in file and
-                         not os.path.isdir(os.path.join(current_directory, directory, file))]
-        except FileNotFoundError:
-            return
-
-        if set_files:
-            if directory in added_directories:
-                # add sessions that aren't already added
-
-                # find the treewidget item
-                iterator = QtWidgets.QTreeWidgetItemIterator(self.directory_queue)
-                while iterator.value():
-                    directory_item = iterator.value()
-                    if directory_item.data(0, 0) == directory:
-                        break
-                    iterator += 1
-
-                # find added sessions
-                added_sessions = []
-                try:
-                    iterator = QtWidgets.QTreeWidgetItemIterator(directory_item)
-                except UnboundLocalError:
-                    # print('hello')
-                    return
-                except RuntimeError:
-                    return
-
-                while iterator.value():
-                    session_item = iterator.value()
-                    added_sessions.append(session_item.data(0, 0))
-                    iterator += 1
-
-                for set_file in set_files:
-                    # find all the tetrodes for that set file
-                    tetrodes = find_tetrodes(set_file, os.path.join(current_directory,
-                                                                    directory))
-
-                    # check if all the tetrodes within that set file have been analyzed
-                    analyzable = session_analyzable(os.path.join(current_directory, directory),
-                                                      set_file, tetrodes)
-
-                    if analyzable:
-                        # add session
-                        if set_file not in added_sessions and set_file != self.current_session:
-                            session_item = QtWidgets.QTreeWidgetItem()
-                            session_item.setText(0, set_file)
-                            directory_item.addChild(session_item)
-                    else:
-                        pass
-
-            else:
-
-                # add all the sessions within this directory
-                directory_item = QtWidgets.QTreeWidgetItem()
-                directory_item.setText(0, directory)
-
-                if set_files:
-                    for set_file in set_files:
-                        if set_file == self.current_session:
-                            continue
-
-                        tetrodes = find_tetrodes(set_file, os.path.join(current_directory,
-                                                                        directory))  # find all the tetrodes for that set file
-
-                        # check if all the tetrodes within that set file have been analyzed
-                        analyzable = session_analyzable(os.path.join(current_directory, directory),
-                                                          set_file, tetrodes)
-
-                        if analyzable:
-                            # add session
-                            session_item = QtWidgets.QTreeWidgetItem()
-                            session_item.setText(0, set_file)
-                            directory_item.addChild(session_item)
-
-                            self.directory_queue.addTopLevelItem(directory_item)
-                else:
-                    pass
 
 
 def silent(self, state):
@@ -859,38 +698,6 @@ def runGUI(main_window, directory):
                             str(datetime.datetime.now().time())[
                             :8], str(sub_directory)))
                     continue
-
-
-def RepeatAddSessions(main_window):
-
-    main_window.repeat_thread_active = True
-
-    try:
-        main_window.adding_session = True
-        addSessions(main_window)
-        main_window.adding_session = False
-    except FileNotFoundError:
-        pass
-    except RuntimeError:
-        pass
-
-    while True:
-
-        if main_window.reset_add_thread:
-            main_window.repeat_thread_active = False
-            main_window.reset_add_thread = False
-            return
-
-        try:
-            main_window.adding_session = True
-            time.sleep(0.1)
-            addSessions(main_window)
-            main_window.adding_session = False
-            time.sleep(0.1)
-        except FileNotFoundError:
-            pass
-        except RuntimeError:
-            pass
 
 
 def run():
