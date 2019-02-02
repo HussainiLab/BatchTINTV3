@@ -1,750 +1,791 @@
-import sys, json, datetime, os, time
-from PIL import Image
-from PyQt5 import QtCore, QtGui, QtWidgets
-from core.utils import center, background, Worker, find_consec, raise_window, cancel_window, find_keys
-from core.settings import Settings_Window
-from core.smtpSettings import SmtpSettings, AddExpter, add_Expter
-from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready, find_tetrodes, session_analyzable
-from core.ChooseDirectory import chooseDirectory
-from core.addSessions import RepeatAddSessions
-
-_author_ = "Geoffrey Barrett"  # defines myself as the author
-
-Large_Font = ("Verdana", 12)  # defines two fonts for different purposes (might not be used
-Small_Font = ("Verdana", 8)
+# import os, read_data, json, subprocess
+import os, json, subprocess, time, datetime, queue, threading, smtplib, shutil
+from distutils.dir_util import copy_tree
+from PyQt5 import QtWidgets
+# from multiprocessing.dummy import Pool as ThreadPool
+# from email.mime.text import MIMEText
+from core.utils import print_msg
 
 
-class Window(QtWidgets.QWidget):  # defines the window class (main window)
+def is_tetrode(file, session):
 
-    def __init__(self):  # initializes the main window
-        super(Window, self).__init__()
-        # self.setGeometry(50, 50, 500, 300)
-        background(self)  # acquires some features from the background function we defined earlier
-        self.setWindowTitle("BatchTINT - Main Window")  # sets the title of the window
-
-        self.numCores = str(os.cpu_count())  # initializing the number of cores the users CPU has
-
-        self.reset_add_thread = False
-        self.repeat_thread_active = False
-
-        self.current_session = ''
-        self.current_subdirectory = ''
-        self.LogAppend = Communicate()
-        self.LogAppend.myGUI_signal_str.connect(self.AppendLog)
-
-        self.LogError = Communicate()
-        self.LogError.myGUI_signal_str.connect(self.raiseError)
-
-        self.RemoveQueueItem = Communicate()
-        self.RemoveQueueItem.myGUI_signal_str.connect(self.takeTopLevel)
-
-        self.RemoveSessionItem = Communicate()
-        self.RemoveSessionItem.myGUI_signal_str.connect(self.takeChild)
-
-        self.RemoveSessionData = Communicate()
-        self.RemoveSessionData.myGUI_signal_str.connect(self.takeChildData)
-
-        self.RemoveChildItem = Communicate()
-        self.RemoveChildItem.myGUI_signal_QTreeWidgetItem.connect(self.removeChild)
-
-        self.adding_session = True
-        self.reordering_queue = False
-
-        self.choice = ''
-        self.home()  # runs the home function
-
-    def home(self):  # defines the home function (the main window)
-        
-        try:  # attempts to open previous directory catches error if file not found
-            # No saved directory's need to create file
-            with open(self.directory_settings, 'r+') as filename:  # opens the defined file
-                directory_data = json.load(filename)  # loads the directory data from file
-                if os.path.exists(directory_data['directory']):
-                    current_directory_name = directory_data['directory']  # defines the data
-                else:
-                    current_directory_name = 'No Directory Currently Chosen!'  # states that no directory was chosen
-
-        except FileNotFoundError:  # runs if file not found
-            with open(self.directory_settings, 'w') as filename:  # opens a file
-                current_directory_name = 'No Directory Currently Chosen!'  # states that no directory was chosen
-                directory_data = {'directory': current_directory_name}  # creates a dictionary
-                json.dump(directory_data, filename)  # writes the dictionary to the file
-
-        # ---------------logo --------------------------------
-
-        cumc_logo = QtWidgets.QLabel(self)  # defining the logo image
-        logo_fname = os.path.join(self.IMG_DIR, "BatchKlustaLogo.png")  # defining logo pathname
-        im2 = Image.open(logo_fname)  # opening the logo with PIL
-        logowidth, logoheight = im2.size  # acquiring the logo width/height
-        logo_pix = QtGui.QPixmap(logo_fname)  # getting the pixmap
-        cumc_logo.setPixmap(logo_pix)  # setting the pixmap
-        cumc_logo.setGeometry(0, 0, logowidth, logoheight)  # setting the geometry
-
-        # ------buttons ------------------------------------------
-        quitbtn = QtWidgets.QPushButton('Quit', self)  # making a quit button
-        quitbtn.clicked.connect(self.close_app)  # defining the quit button functionality (once pressed)
-        quitbtn.setShortcut("Ctrl+Q")  # creates shortcut for the quit button
-        quitbtn.setToolTip('Click to quit Batch-Tint!')
-
-        self.setbtn = QtWidgets.QPushButton('Klusta Settings')  # Creates the settings pushbutton
-        self.setbtn.setToolTip('Define the settings that KlustaKwik will use.')
-
-        self.klustabtn = QtWidgets.QPushButton('Run', self)  # creates the batch-klusta pushbutton
-        self.klustabtn.setToolTip('Click to perform batch analysis via Tint and KlustaKwik!')
-
-        self.smtpbtn = QtWidgets.QPushButton('SMTP Settings', self)
-        self.smtpbtn.setToolTip("Click to change the SMTP settings for e-mail notifications.")
-
-        self.choose_dir = QtWidgets.QPushButton('Choose Directory', self)  # creates the choose directory pushbutton
-
-        self.current_directory = QtWidgets.QLineEdit()  # creates a line edit to display the chosen directory (current)
-        self.current_directory.textChanged.connect(self.change_directory)
-        self.current_directory.setText(current_directory_name)  # sets the text to the current directory
-        self.current_directory.setAlignment(QtCore.Qt.AlignHCenter)  # centers the text
-        self.current_directory.setToolTip('The current directory that Batch-Tint will analyze.')
-
-        # defines an attribute to exchange info between classes/modules
-        self.current_directory_name = current_directory_name
-
-        # defines the button functionality once pressed
-        self.klustabtn.clicked.connect(lambda: self.run(self.current_directory_name))
-
-        # ------------------------------------ check box  ------------------------------------------------
-        self.nonbatch_check = QtWidgets.QCheckBox('Non-Batch?')
-        self.nonbatch_check.setToolTip("Check this if you don't want to run batch. This means you will choose\n"
-                                       "the folder that directly contains all the session files (.set, .pos, .N, etc.).")
-        self.nonbatch = 0
-
-        self.silent_cb = QtWidgets.QCheckBox('Run Silently')
-        self.silent_cb.setToolTip("Check if you want Tint to run in the background.")
-
-        # ---------------- queue widgets --------------------------------------------------
-        self.directory_queue = QtWidgets.QTreeWidget()
-        self.directory_queue.headerItem().setText(0, "Axona Sessions:")
-        self.directory_queue.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
-        directory_queue_label = QtWidgets.QLabel('Queue: ')
-
-        self.up_btn = QtWidgets.QPushButton("Move Up", self)
-        self.up_btn.setToolTip("Clcik this button to move selected directories up on the queue!")
-        self.up_btn.clicked.connect(lambda: self.moveQueue('up'))
-
-        self.down_btn = QtWidgets.QPushButton("Move Down", self)
-        self.down_btn.setToolTip("Clcik this button to move selected directories down on the queue!")
-        self.down_btn.clicked.connect(lambda: self.moveQueue('down'))
-
-        queue_btn_layout = QtWidgets.QVBoxLayout()
-        queue_btn_layout.addWidget(self.up_btn)
-        queue_btn_layout.addWidget(self.down_btn)
-
-        queue_layout = QtWidgets.QVBoxLayout()
-        queue_layout.addWidget(directory_queue_label)
-        queue_layout.addWidget(self.directory_queue)
-
-        queue_and_btn_layout = QtWidgets.QHBoxLayout()
-        queue_and_btn_layout.addLayout(queue_layout)
-        queue_and_btn_layout.addLayout(queue_btn_layout)
-
-        # ------------------------ multithreading widgets -------------------------------------
-
-        Multithread_l = QtWidgets.QLabel('Simultaneous Tetrodes (#):')
-        Multithread_l.setToolTip('Input the number of tetrodes you want to analyze simultaneously')
-
-        self.numThreads = QtWidgets.QLineEdit()
-
-        Multi_layout = QtWidgets.QHBoxLayout()
-
-        # for order in [self.multithread_cb, core_num_l, self.core_num, Multithread_l, self.numThreads]:
-        for order in [Multithread_l, self.numThreads]:
-            if 'Layout' in order.__str__():
-                Multi_layout.addLayout(order)
-            else:
-                Multi_layout.addWidget(order, 0, QtCore.Qt.AlignCenter)
-
-        checkbox_layout = QtWidgets.QHBoxLayout()
-        checkbox_layout.addStretch(1)
-        checkbox_layout.addWidget(self.nonbatch_check)
-        checkbox_layout.addStretch(1)
-        checkbox_layout.addWidget(self.silent_cb)
-        checkbox_layout.addStretch(1)
-        checkbox_layout.addLayout(Multi_layout)
-        checkbox_layout.addStretch(1)
-
+    if os.path.splitext(file)[0] == session:
         try:
-            with open(self.settings_fname, 'r+') as filename:
-                settings = json.load(filename)
-                self.numThreads.setText(str(settings['NumThreads']))
-                if settings['Silent'] == 1:
-                    self.silent_cb.toggle()
-                if settings['nonbatch'] == 1:
-                    self.nonbatch_check.toggle
+            tetrode_number = int(os.path.splitext(file)[1][1:])
+            return True
+        except ValueError:
+            return False
+    else:
+        return False
 
-        except FileNotFoundError:
-            self.silent_cb.toggle()
-            self.numThreads.setText('1')
 
-        # ------------- Log Box -------------------------
-        self.Log = QtWidgets.QTextEdit()
-        log_label = QtWidgets.QLabel('Log: ')
+def get_tetrode_files(file_list, session):
+    tetrode_files = [file for file in file_list if is_tetrode(file, session)]
+    return tetrode_files
 
-        log_lay = QtWidgets.QVBoxLayout()
-        log_lay.addWidget(log_label, 0, QtCore.Qt.AlignTop)
-        log_lay.addWidget(self.Log)
 
-        # ------------------------------------ version information -------------------------------------------------
-        # finds the modification date of the program
+def klusta(sub_directory, directory, settings, settings_filename=None, self=None):
+
+    msg = '[%s %s]: Now analyzing files in the %s folder!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], sub_directory)
+
+    print_msg(self, msg)
+
+    if self is not None:
+        self.current_subdirectory = os.path.basename(sub_directory)
+
+    sub_directory_fullpath = os.path.join(directory, sub_directory)  # defines fullpath
+
+    logfile_directory = os.path.join(sub_directory_fullpath, 'LogFiles')  # defines directory for log files
+    inifile_directory = os.path.join(sub_directory_fullpath, 'IniFiles')  # defines directory for .ini files
+
+    processed_directory = os.path.join(directory, 'Processed')  # defines processed file directory
+
+    for _ in [processed_directory, logfile_directory, inifile_directory]:
+        if not os.path.exists(_):  # makes the directories if they don't exist
+            os.makedirs(_)
+
+    f_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
+
+    set_files = [file for file in f_list if '.set' in file]  # fines .set files
+
+    if len(set_files) > 1:  # displays messages counting how many set files in directory
+        msg = '[%s %s]: There are %d \'.set\' files in this directory!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], len(set_files))
+
+        print_msg(self, msg)
+
+    elif len(set_files) == 1:
+
+        msg = '[%s %s]: There is %d \'.set\' file in this directory!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], len(set_files))
+
+        print_msg(self, msg)
+
+    skipped = 0
+    experimenter = []  # initializing experimenter list
+    error = []  # initializing error list
+    for i in range(len(set_files)):  # loops through each set file
+        set_file = os.path.splitext(set_files[i])[0]  # define set file without extension
+        set_path = os.path.join(sub_directory_fullpath, set_file)  # defines set file path
+
+        msg = '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], set_file, i+1, len(set_files))
+
+        print_msg(self, msg)
+
+        # acquires tetrode files within directory
+
+        tet_list = get_tetrode_files(f_list, set_file)
+        #  if there are no tetrodes then skips
+
+        analyzable, error_return = check_session_files(sub_directory_fullpath, set_file, tet_list, self=self)
+
+        if analyzable:
+            q = queue.Queue()
+            for u in tet_list:
+                q.put(u)
+
+            ThreadCount = int(settings['NumThreads'])
+
+            if ThreadCount > len(tet_list):
+                ThreadCount = len(tet_list)
+            skipped_mat = []
+
+            with open(set_path + '.set', 'r+') as f:
+                for line in f:
+                    if 'experimenter ' in line:
+                        expter_line = line.split(' ', 1)
+                        expter_line.remove('experimenter')
+                        experimenter.append(' '.join(expter_line))
+                        break
+
+            while not q.empty():
+                Threads = []
+                for i in range(ThreadCount):
+                    t = threading.Thread(target=analyze_tetrode, args=(q, settings, experimenter, error, skipped_mat,
+                                                                       i, set_path, set_file, f_list,
+                                                                       sub_directory_fullpath, logfile_directory,
+                                                                       inifile_directory), kwargs={'self': self})
+                    time.sleep(1)
+                    t.daemon = True
+                    t.start()
+                    Threads.append(t)
+
+                # q.join()
+                for t in Threads:
+                    t.join()
+            q.join()
+        else:
+            error.extend(error_return)
+            continue
+    msg = '[%s %s]: Analysis in the %s directory has been completed!' % (
+            str(datetime.datetime.now().date()),
+            str(datetime.datetime.now().time())[
+            :8], sub_directory)
+
+    print_msg(self, msg)
+
+    processed_directory = os.path.join(directory, 'Processed')
+
+    send_email(experimenter, error, sub_directory, processed_directory, self=self)
+
+    directory_source = sub_directory_fullpath
+    directory_destination = os.path.join(processed_directory, sub_directory)
+
+    processing = 1
+    while processing == 1:
+        time.sleep(1)
+        processing = 0
         try:
-            mod_date = time.ctime(os.path.getmtime(__file__))
-        except:
-            mod_date = time.ctime(os.path.getmtime(os.path.join(self.PROJECT_DIR, "BatchSort.exe")))
-
-        # creates a label with that information
-        vers_label = QtWidgets.QLabel("BatchTINT V3.0 - Last Updated: " + mod_date)
-
-        # ------------------- page layout ----------------------------------------
-        layout = QtWidgets.QVBoxLayout()  # setting the layout
-
-        layout1 = QtWidgets.QHBoxLayout()  # setting layout for the directory options
-        layout1.addWidget(self.choose_dir)  # adding widgets to the first tab
-        layout1.addWidget(self.current_directory)
-
-        btn_order = [self.klustabtn, self.setbtn, self.smtpbtn, quitbtn]  # defining button order (left to right)
-        btn_layout = QtWidgets.QHBoxLayout()  # creating a widget to align the buttons
-        for butn in btn_order:  # adds the buttons in the proper order
-            btn_layout.addWidget(butn)
-
-        layout_order = [cumc_logo, layout1, checkbox_layout, queue_and_btn_layout, log_lay, btn_layout]
-
-        layout.addStretch(1)  # adds the widgets/layouts according to the order
-        for order in layout_order:
-            if 'Layout' in order.__str__():
-                layout.addLayout(order)
-                layout.addStretch(1)
-            else:
-                layout.addWidget(order, 0, QtCore.Qt.AlignCenter)
-                layout.addStretch(1)
-
-        layout.addStretch(1)  # adds stretch to put the version info at the bottom
-        layout.addWidget(vers_label)  # adds the date modification/version number
-        self.setLayout(layout)  # sets the widget to the one we defined
-
-        center(self)  # centers the widget on the screen
-
-        self.show()  # shows the widget
-
-        if self.current_directory_name != 'No Directory Currently Chosen!':
-            # starting adding any existing sessions in a different thread
-            self.RepeatAddSessionsThread = QtCore.QThread()
-            self.RepeatAddSessionsThread.start()
-
-            self.RepeatAddSessionsWorker = Worker(RepeatAddSessions, self)
-            self.RepeatAddSessionsWorker.moveToThread(self.RepeatAddSessionsThread)
-            self.RepeatAddSessionsWorker.start.emit("start")
-
-    def run(self, directory):  # function that runs klustakwik
-
-        """This method runs when the Batch-TINT button is pressed on the GUI,
-        and commences the analysis"""
-        self.batch_tint = True
-        self.klustabtn.setText('Stop')
-        self.klustabtn.setToolTip('Click to stop Batch-Tint.')  # defining the tool tip for the start button
-        self.klustabtn.clicked.disconnect()
-        self.klustabtn.clicked.connect(self.stopBatch)
-
-        self.BatchTintThread = QtCore.QThread()
-        self.BatchTintThread.start()
-
-        self.BatchTintWorker = Worker(runGUI, self, directory)
-        self.BatchTintWorker.moveToThread(self.BatchTintThread)
-        self.BatchTintWorker.start.emit("start")
-
-    def close_app(self):
-        # pop up window that asks if you really want to exit the app ------------------------------------------------
-
-        choice = QtWidgets.QMessageBox.question(self, "Quitting BatchTINT",
-                                            "Do you really want to exit?",
-                                            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-        if choice == QtWidgets.QMessageBox.Yes:
-            sys.exit()  # tells the app to quit
-        else:
-            pass
-
-    def raiseError(self, error_val):
-        """raises an error window given certain errors from an emitted signal"""
-
-        if 'ManyFet' in error_val:
-            self.choice = QtWidgets.QMessageBox.question(self, "No Chosen Directory: BatchTINT",
-                                                     "You have chosen more than four features,\n"
-                                                     "clustering will take a long time.\n"
-                                                     "Do you realy want to continue?",
-                                                 QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.No)
-
-        elif 'NoDir' in error_val:
-            self.choice = QtWidgets.QMessageBox.question(self, "No Chosen Directory: BatchTINT",
-                                                   "You have not chosen a directory,\n"
-                                                   "please choose one to continue!",
-                                                     QtWidgets.QMessageBox.Ok)
-
-        elif 'GoogleDir' in error_val:
-            self.choice = QtWidgets.QMessageBox.question(self, "Google Drive Directory: BatchTINT",
-                                                       "You have not chosen a directory within Google Drive,\n"
-                                                       "be aware that during testing we have experienced\n"
-                                                       "permissions errors while using Google Drive directories\n"
-                                                       "that would result in BatchTINTV3 not being able to move\n"
-                                                       "the files to the Processed folder (and stopping the GUI),\n"
-                                                       "do you want to continue?",
-                                                       QtWidgets.QMessageBox.Yes, QtWidgets.QMessageBox.No)
-        elif 'NoSet' in error_val:
-            self.choice = QtWidgets.QMessageBox.question(self, "No .Set Files!",
-                                                     "You have chosen a directory that has no .Set files!\n"
-                                                     "Please choose a different directory!",
-                                                     QtWidgets.QMessageBox.Ok)
-
-        elif 'InvDirBatch' in error_val:
-            self.choice = QtWidgets.QMessageBox.question(self, "Invalid Directory!",
-                                                     "In 'Batch Mode' you need to choose a directory\n"
-                                                     "with subdirectories that contain all your Tint\n"
-                                                     "files. Press Abort and choose new file, or if you\n"
-                                                     "plan on adding folders to the chosen directory press\n"
-                                                     "continue.",
-                                                     QtWidgets.QMessageBox.Abort | QtWidgets.QMessageBox.Ok)
-        elif 'InvDirNonBatch' in error_val:
-            self.choice = QtWidgets.QMessageBox.question(self, "Invalid Directory!",
-                                                     "In 'Non-Batch Mode' you need to choose a directory\n"
-                                                     "that contain all your Tint files.\n",
-                                                     QtWidgets.QMessageBox.Ok)
-
-    def AppendLog(self, message):
-        """
-        A function that will append the Log field of the main window (mainly
-        used as a slot for a custom pyqt signal)
-        """
-        self.Log.append(message)
-
-    def stopBatch(self):
-        self.klustabtn.clicked.connect(lambda: self.run(self.current_directory_name))
-        self.BatchTintThread.terminate()
-
-        self.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: BatchTint stopped!' % (str(datetime.datetime.now().date()),
-                                                                 str(datetime.datetime.now().time())[
-                                                                 :8]))
-
-        self.batch_tint = False
-        self.klustabtn.setText('Run')
-        self.klustabtn.setToolTip(
-            'Click to perform batch analysis via Tint and KlustaKwik!')  # defining the tool tip for the start button
-
-    def change_directory(self):
-        """
-        Whenever directory is changed, clear the directory queue
-        """
-        self.current_directory_name = self.current_directory.text()
-
-        try:
-            self.directory_queue.clear()
-        except AttributeError:
-            pass
-
-        self.restart_add_sessions_thread()
-
-    def restart_add_sessions_thread(self):
-
-        self.reset_add_thread = True
-
-        if not hasattr(self, 'repeat_thread_active'):
-            return
-
-        # while self.repeat_thread_active:
-        #     time.sleep(0.1)
-
-        if hasattr(self, 'RepeatAddSessionsThread'):
-            self.RepeatAddSessionsThread.terminate()
-
-        # self.reset_add_thread = False
-        self.RepeatAddSessionsThread = QtCore.QThread()
-        self.RepeatAddSessionsThread.setTerminationEnabled(True)
-        self.RepeatAddSessionsThread.start()
-
-        self.RepeatAddSessionsWorker = Worker(RepeatAddSessions, self)
-        self.RepeatAddSessionsWorker.moveToThread(self.RepeatAddSessionsThread)
-        self.RepeatAddSessionsWorker.start.emit("start")
-
-    def moveQueue(self, direction):
-        """This method is not threaded"""
-        # get all the queue items
-
-        while self.adding_session:
-            if self.reordering_queue:
-                self.reordering_queue = False
-            time.sleep(0.1)
-
-        time.sleep(0.1)
-        self.reordering_queue = True
-
-        item_count = self.directory_queue.topLevelItemCount()
-        queue_items = {}
-        for item_index in range(item_count):
-            queue_items[item_index] = self.directory_queue.topLevelItem(item_index)
-
-        # get selected options and their locations
-        selected_items = self.directory_queue.selectedItems()
-        selected_items_copy = []
-        [selected_items_copy.append(item.clone()) for item in selected_items]
-
-        add_to_new_queue = list(queue_items.values())
-
-        if not selected_items:
-            # skips when there are no items selected
-            return
-
-        new_queue_order = {}
-
-        # find if consecutive indices from 0 on are selected as these won't move any further up
-
-        indices = find_keys(queue_items, selected_items)
-        consecutive_indices = find_consec(indices)
-        # this will spit a list of lists, these nested lists will have consecutive indices within them
-        # i.e. if indices 0, 1 and 3 were chosen it would have [[0, 1], [3]]
-
-        if 'up' in direction:
-            # first add the selected items to their new spots
-            for consecutive in consecutive_indices:
-                if 0 in consecutive:
-                    # these items can't move up any further
-                    for index in consecutive:
-                        new_item = queue_items[index].clone()
-                        new_queue_order[index] = new_item
-
-                else:
-                    for index in consecutive:
-                        # move these up the list (decrease in index value since 0 is the top of the list)
-                        new_item = queue_items[index].clone()
-                        new_queue_order[index-1] = new_item
-
-            for key, val in new_queue_order.items():
-                for index, item in enumerate(add_to_new_queue):
-                    if val.data(0, 0) == item.data(0, 0):
-                        add_to_new_queue.remove(item)  # remove item from the list
-                        break
-
-            _ = list(new_queue_order.keys())  # a list of already moved items
-
-            # place the unplaced items that aren't moving
-            for static_index, static_value in queue_items.items():
-                # print(static_value.data(0,0))
-                # place the unplaced items
-                if static_index in _:
-                    continue
-
-                for queue_item in new_queue_order.values():
-                    not_in_reordered = True
-                    if static_value.data(0, 0) == queue_item.data(0, 0):
-                        # don't re-add the one that is going to be moved
-                        not_in_reordered = False
-                        break
-
-                if not_in_reordered:
-                    for value in add_to_new_queue:
-                        if static_value.data(0, 0) == value.data(0, 0):
-                            add_to_new_queue.remove(value)  # remove item from the list
-                            break
-
-                    new_queue_order[static_index] = static_value.clone()
-
-        elif 'down' in direction:
-            # first add the selected items to their new spots
-            for consecutive in consecutive_indices:
-                if (item_count-1) in consecutive:
-                    # these items can't move down any further
-                    for index in consecutive:
-                        new_item = queue_items[index].clone()
-                        # new_item.setSelected(True)
-                        new_queue_order[index] = new_item
-                else:
-                    for index in consecutive:
-                        # move these down the list (increase in index value since 0 is the top of the list)
-                        new_item = queue_items[index].clone()
-                        # new_item.setSelected(True)
-                        new_queue_order[index + 1] = new_item
-
-            for key, val in new_queue_order.items():
-                for index, item in enumerate(add_to_new_queue):
-                    if val.data(0, 0) == item.data(0, 0):
-                        add_to_new_queue.remove(item)
-                        break
-
-            _ = list(new_queue_order.keys())  # a list of already moved items
-
-            # place the unplaced items that aren't moving
-            for static_index, static_value in queue_items.items():
-                if static_index in _:
-                    continue
-
-                for queue_item in new_queue_order.values():
-                    not_in_reordered = True
-                    if static_value.data(0, 0) == queue_item.data(0, 0):
-                        # don't re-add the one that is going to be moved
-                        not_in_reordered = False
-                        break
-
-                if not_in_reordered:
-                    for value in add_to_new_queue:
-                        if static_value.data(0, 0) == value.data(0, 0):
-                            add_to_new_queue.remove(value)  # remove item from the list
-                            break
-
-                    new_queue_order[static_index] = static_value.clone()
-
-        # add the remaining items
-        indices_needed = [index for index in range(item_count) if index not in list(new_queue_order.keys())]
-        for index, displaced_item in enumerate(add_to_new_queue):
-            new_queue_order[indices_needed[index]] = displaced_item.clone()
-
-        self.directory_queue.clear()  # clears the list
-
-        for key, value in sorted(new_queue_order.items()):
-            self.directory_queue.addTopLevelItem(value)
-
-        # reselect the items
-        iterator = QtWidgets.QTreeWidgetItemIterator(self.directory_queue)
-        while iterator.value():
-            for selected_item in selected_items_copy:
-                item = iterator.value()
-                if item.data(0, 0) == selected_item.data(0, 0):
-                    item.setSelected(True)
-                    break
-            iterator += 1
-        self.reordering_queue = False
-
-    def takeTopLevel(self, item_count):
-        item_count = int(item_count)
-        self.directory_queue.takeTopLevelItem(item_count)
-        self.top_level_taken = True
-
-    def setChild(self, child_count):
-        self.child_session = self.directory_item.child(int(child_count))
-        self.child_set = True
-
-    def takeChild(self, child_count):
-        self.child_session = self.directory_item.takeChild(int(child_count))
-        self.child_taken = True
-        # return child_session
-
-    def takeChildData(self, child_count):
-        self.child_session = self.directory_item.takeChild(int(child_count)).data(0, 0)
-        self.child_data_taken = True
-
-    def removeChild(self, QTreeWidgetItem):
-        root = self.directory_queue.invisibleRootItem()
-        (QTreeWidgetItem.parent() or root).removeChild(QTreeWidgetItem)
-        self.child_removed = True
-
-
-def new_directory(self, main):
-    """This method will look open a dialog and prompt the user to select a directory,"""
-    current_directory_name = str(QtWidgets.QFileDialog.getExistingDirectory(self, "Select Directory"))
-    self.current_directory_e.setText(current_directory_name)
-
-
-def silent(self, state):
-    with open(self.settings_fname, 'r+') as filename:
-        settings = json.load(filename)
-        if state:
-            settings['Silent'] = 1
-        else:
-            settings['Silent'] = 0
-    with open(self.settings_fname, 'w') as filename:
-        json.dump(settings, filename)
-
-
-class Communicate(QtCore.QObject):
-    """A custom pyqtsignal so that errors and popups can be called from the threads
-    to the main window"""
-    myGUI_signal_str = QtCore.pyqtSignal(str)
-    myGUI_signal_QTreeWidgetItem = QtCore.pyqtSignal(QtWidgets.QTreeWidgetItem)
-
-
-def nonbatch(self, state):
-    self.directory_queue.clear()
-    self.restart_add_sessions_thread()
-
-    with open(self.settings_fname, 'r+') as filename:
-        settings = json.load(filename)
-        if state:
-            settings['nonbatch'] = 1
-            self.nonbatch = 1
-        else:
-            settings['nonbatch'] = 0
-            self.nonbatch = 0
-    with open(self.settings_fname, 'w') as filename:
-        json.dump(settings, filename)
-
-
-def runGUI(main_window, directory):
-    """This method is executed when you press 'Run' in the GUI."""
-    # ------- making a function that runs the entire GUI ----------
-
-    with open(main_window.settings_fname, 'r+') as f:  # opens setting file
-        settings = json.load(f)  # loads settings
-
-    # checks if the settings are appropriate to run analysis
-    klusta_ready = check_klusta_ready(settings, directory, self=main_window,
-                                      settings_filename=main_window.settings_fname,
-                                      numThreads=main_window.numThreads.text(),
-                                      numCores=main_window.numCores)
-
-    if klusta_ready:
-
-        main_window.LogAppend.myGUI_signal_str.emit(
-            '[%s %s]: Analyzing the following directory: %s!' % (str(datetime.datetime.now().date()),
-                                                                 str(datetime.datetime.now().time())[
-                                                                 :8], directory))
-
-        if main_window.nonbatch == 0:
-            # message that shows how many files were found
-            main_window.LogAppend.myGUI_signal_str.emit(
-                '[%s %s]: Found %d sub-directories in the directory!' % (str(datetime.datetime.now().date()),
-                                                               str(datetime.datetime.now().time())[
-                                                               :8], main_window.directory_queue.topLevelItemCount()))
-
-        else:
-            directory = os.path.dirname(directory)
-
-        if main_window.directory_queue.topLevelItemCount() == 0:
-            if main_window.nonbatch == 1:
-                main_window.choice = ''
-                main_window.LogError.myGUI_signal_str.emit('InvDirNonBatch')
-                while main_window.choice == '':
-                    time.sleep(0.2)
-                main_window.stopBatch()
-                return
-            else:
-                main_window.choice = ''
-                main_window.LogError.myGUI_signal_str.emit('InvDirBatch')
-                while main_window.choice == '':
-                    time.sleep(0.2)
-
-                if main_window.choice == QtWidgets.QMessageBox.Abort:
-                    main_window.stopBatch()
+            # moves the entire folder to the processed folder
+            if os.path.exists(directory_destination):
+                try:
+                    # shutil.copytree(directory_source, directory_destination)
+                    copy_tree(directory_source, directory_destination)
+                except PermissionError:
                     return
-
-        # ----------- cycle through each file and find the tetrode files ------------------------------------------
-        # for sub_directory in sub_directories:  # finding all the folders within the directory
-
-        while main_window.batch_tint:
-
-            main_window.directory_item = main_window.directory_queue.topLevelItem(0)
-
-            if not main_window.directory_item:
-                continue
+                shutil.rmtree(directory_source)
             else:
-                main_window.current_subdirectory = main_window.directory_item.data(0, 0)
+                shutil.move(directory_source, processed_directory)
+        except PermissionError:
+            processing = 1
 
-                # check if the directory exists, if not, remove it
+    if self is not None:
+        self.current_subdirectory = ''
+        self.current_session = ''
 
-                if not os.path.exists(os.path.join(directory, main_window.current_subdirectory)):
-                    main_window.top_level_taken = False
-                    main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
-                    while not main_window.top_level_taken:
-                        time.sleep(0.1)
-                    # main_window.directory_queue.takeTopLevelItem(0)
-                    continue
 
-            while main_window.directory_item.childCount() != 0:
+def analyze_tetrode(q, settings,  experimenter,
+                    error, skipped_mat, index, set_path, set_file, f_list, sub_directory_fullpath,
+                    logfile_directory, inifile_directory, self=None):
 
-                main_window.current_session = main_window.directory_item.child(0).data(0, 0)
-                main_window.child_data_taken = False
-                main_window.RemoveSessionData.myGUI_signal_str.emit(str(0))
-                while not main_window.child_data_taken:
-                    time.sleep(0.1)
+    inactive_tet_dir = os.path.join(sub_directory_fullpath, 'InactiveTetrodeFiles')
+    no_spike_dir = os.path.join(sub_directory_fullpath, 'NoSpikeFiles')
 
-                sub_directory = main_window.directory_item.data(0, 0)
+    if q.empty():
+        try:
+            q.task_done()
+        except ValueError:
+            pass
+    else:
+        tet_list = [q.get()]
+        for tet_fname in tet_list:
 
-                directory_ready = False
+            tetrode = int(os.path.splitext(tet_fname)[-1][1:])
 
-                main_window.LogAppend.myGUI_signal_str.emit(
-                    '[%s %s]: Checking if the following directory is ready to analyze: %s!' % (
+            msg = '[%s %s]: Now analyzing the following file: %s!' % (
+                    str(datetime.datetime.now().date()),
+                    str(datetime.datetime.now().time())[
+                    :8], tet_fname)
+
+            print_msg(self, msg)
+
+            clu_name = '%s.clu.%d' % (set_path, tetrode)
+            cut_path = '%s_%d.cut' % (set_path, tetrode)
+            cut_name = os.path.basename(cut_path)
+
+            if cut_name in f_list:
+                msg = '[%s %s]: The %s file has already been analyzed!' % (
                         str(datetime.datetime.now().date()),
                         str(datetime.datetime.now().time())[
-                        :8], str(sub_directory)))
+                        :8], tet_fname)
 
-                while not directory_ready:
-                    directory_ready = folder_ready(main_window, os.path.join(directory, sub_directory))
+                print_msg(self, msg)
 
-                if main_window.directory_item.childCount() == 0:
-                    main_window.top_level_taken = False
-                    main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
-                    while not main_window.top_level_taken:
-                        time.sleep(0.1)
-                try:
+                q.task_done()
+                continue
 
-                    # runs the function that will perform the klusta'ing
-                    if not os.path.exists(os.path.join(directory, sub_directory)):
-                        main_window.top_level_taken = False
-                        main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
-                        while not main_window.top_level_taken:
-                            time.sleep(0.1)
-                        continue
+            tet_path = os.path.join(sub_directory_fullpath, tet_fname)
+
+            ini_fpath = tet_path + '.ini'  # .ini filename
+            ini_fname = tet_fname + '.ini'  # .ini fullpath
+
+            parm_space = ' '
+            # klusta kwik parameters to utilize
+            kkparmstr = parm_space.join(['-MaxPossibleClusters', str(settings['MaxPos']),
+                                         '-UseFeatures', str(settings['UseFeatures']),
+                                         '-nStarts', str(settings['nStarts']),
+                                         '-RandomSeed', str(settings['RandomSeed']),
+                                         '-DistThresh', str(settings['DistThresh']),
+                                         '-FullStepEvery', str(settings['FullStepEvery']),
+                                         '-ChangedThresh', str(settings['ChangedThresh']),
+                                         '-MaxIter', str(settings['MaxIter']),
+                                         '-SplitEvery', str(settings['SplitEvery']),
+                                         '-Subset', str(settings['Subset']),
+                                         '-PenaltyK', str(settings['PenaltyK']),
+                                         '-PenaltyKLogN', str(settings['PenaltyKLogN']),
+                                         '-UseDistributional', '1',
+                                         '-UseMaskedInitialConditions', '1',
+                                         '-AssignToFirstClosestMask', '1',
+                                         '-PriorPoint', '1',
+                                         ])
+
+            s = "\n"
+            # channels to include
+            inc_channels = s.join(['[IncludeChannels]',
+                                   '1=' + str(settings['1']),
+                                   '2=' + str(settings['2']),
+                                   '3=' + str(settings['3']),
+                                   '4=' + str(settings['4'])
+                                   ])
+            # write these settings to the .ini file
+            with open(ini_fpath, 'w') as fname:
+
+                s = "\n"
+                main_seq = s.join(['[Main]',
+                                   str('Filename=' + '"' + set_path + '"'),
+                                   str('IDnumber=' + str(tetrode)),
+                                   str('KKparamstr=' + kkparmstr),
+                                   str(inc_channels)
+                                   ])
+
+                clust_ft_seq = s.join(['\n[ClusteringFeatures]',
+                                       str('PC1=' + str(settings['PC1'])),
+                                       str('PC2=' + str(settings['PC2'])),
+                                       str('PC3=' + str(settings['PC3'])),
+                                       str('PC4=' + str(settings['PC4'])),
+                                       str('A=' + str(settings['A'])),
+                                       str('Vt=' + str(settings['Vt'])),
+                                       str('P=' + str(settings['P'])),
+                                       str('T=' + str(settings['T'])),
+                                       str('tP=' + str(settings['tP'])),
+                                       str('tT=' + str(settings['tT'])),
+                                       str('En=' + str(settings['En'])),
+                                       str('Ar=' + str(settings['Ar']))
+                                       ])
+
+                report_seq = s.join(['\n[Reporting]',
+                                     'Log=' + str(settings['Log File']),
+                                     'Verbose=' + str(settings['Verbose']),
+                                     'Screen=' + str(settings['Screen'])
+                                     ])
+
+                for write_order in [main_seq, clust_ft_seq, report_seq]:
+                    fname.seek(0, 2)  # seek the files end
+                    fname.write(write_order)
+
+                fname.close()
+
+            log_fpath = tet_path + '_log.txt'
+            log_fname = tet_fname + '_log.txt'
+
+            cmdline = ["cmd", "/q", "/k", "echo off"]
+
+            reading = 1
+            with open(tet_path, 'rb') as f:
+                while reading == 1:
+                    line = f.readline()
+                    if 'experimenter ' in str(line):
+                        expter_line = str(line).split(' ', 1)
+                        expter_line.remove("b'experimenter")
+                        experimenter.append(' '.join(expter_line))
+                        reading = 0
+                    elif 'data_start' in str(line):
+                        reading = 0
+
+            cmd = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            if settings['Silent'] == 0:
+                batch = bytes(
+                    'tint ' + '"' + set_path + '" ' + str(
+                        tetrode) + ' "' + log_fpath + '" /runKK /KKoptions "' +
+                    ini_fpath + '" /convertkk2cut /visible\n'
+                    'exit\n', 'ascii')
+            else:
+                batch = bytes(
+                    'tint ' + '"' + set_path + '" ' + str(
+                        tetrode) + ' "' + log_fpath + '" /runKK /KKoptions "' +
+                    ini_fpath + '" /convertkk2cut\n'
+                                'exit\n', 'ascii')
+
+            cmd.stdin.write(batch)
+            cmd.stdin.flush()
+
+            processing = 1
+
+            while processing == 1:
+                time.sleep(2)
+                new_cont = os.listdir(sub_directory_fullpath)
+
+                if cut_name in new_cont:
+                    processing = 0
+                    try:
+                        try:
+                            # moves the log files
+                            try:
+                                os.rename(log_fpath, os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                            except FileNotFoundError:
+                                pass
+
+                        except FileExistsError:
+                            os.remove(os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                            os.rename(log_fpath, os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                        try:
+                            # moves the .ini files
+                            os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+                        except FileExistsError:
+                            os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
+                            os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+
+                        msg = '[%s %s]: The analysis of the %s file has finished!' % (
+                                str(datetime.datetime.now().date()),
+                                str(datetime.datetime.now().time())[
+                                :8], tet_fname)
+
+                        print_msg(self, msg)
+                        pass
+
+                    except PermissionError:
+                        processing = 1
+
+                elif log_fname in new_cont:
+                    active_tet = []
+                    no_spike = []
+                    with open(log_fpath, 'r') as f:
+                        for line in f:
+                            if 'list of active tetrodes:' in line:
+                                activ_tet = line
+                                if str(tetrode) not in str(line):
+
+                                    if not os.path.exists(inactive_tet_dir):
+                                        os.makedirs(inactive_tet_dir)
+
+                                    cur_date = datetime.datetime.now().date()
+                                    cur_time = datetime.datetime.now().time()
+                                    not_active = ': Tetrode ' + str(tetrode) + ' is not active within the ' + \
+                                                 set_file + ' set file!'
+                                    error.append('\tTetrode ' + str(tetrode) + ' was not active within the ' + \
+                                                 set_file + ' \'.set\' file, couldn\'t perform analysis.\n')
+                                    print('[' + str(cur_date) + ' ' + str(cur_time)[:8] + ']' + not_active)
+                                    break
+                            elif 'reading 0 spikes' in line:
+
+                                if not os.path.exists(no_spike_dir):
+                                    os.makedirs(no_spike_dir)
+
+                                no_spike = 1
+                                # skipped_mat.append(1)
+                                cur_date = datetime.datetime.now().date()
+                                cur_time = datetime.datetime.now().time()
+                                not_spike = ': Tetrode ' + str(tetrode) + ' within the ' + \
+                                             set_file + ' \'.set\' file, has no spikes, skipping analysis!'
+
+                                error.append('\tTetrode ' + str(tetrode) + ' within the ' + \
+                                             set_file + ' \'.set\' file, had no spikes, couldn\'t perform analysis\n')
+
+                                print('[' + str(cur_date) + ' ' + str(cur_time)[:8] + ']' + not_spike)
+                                break
+
+                            else:
+                                activ_tet = []
+
+                    if 'activ_tet' in locals() and activ_tet != [] and str(tetrode) not in str(activ_tet):
+                        x = 1
+                        while x == 1:
+                            try:
+                                try:
+                                    # moves the log files
+                                    try:
+                                        os.rename(log_fpath,
+                                                  os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                                    except FileNotFoundError:
+                                        pass
+
+                                except FileExistsError:
+                                    os.remove(os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                                    os.rename(log_fpath,
+                                              os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                                try:
+                                    # moves the .ini files
+                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+                                except FileExistsError:
+                                    os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
+                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+
+                                os.rename(tet_path, os.path.join(inactive_tet_dir, tet_fname))
+
+                                x = 0
+
+                            except PermissionError:
+                                x = 1
+                            processing = 0
+
+                    if 'no_spike' in locals() and no_spike == 1:
+                        x = 1
+                        while x == 1:
+                            try:
+                                try:
+                                    # moves the log files
+                                    try:
+                                        os.rename(log_fpath,
+                                                  os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                                    except FileNotFoundError:
+                                        pass
+
+                                except FileExistsError:
+                                    os.remove(os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                                    os.rename(log_fpath,
+                                              os.path.join(logfile_directory, tet_fname + '_log.txt'))
+                                try:
+                                    # moves the .ini files
+                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+                                except FileExistsError:
+                                    os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
+                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+
+                                os.rename(tet_path, os.path.join(no_spike_dir, tet_fname))
+
+                                x = 0
+
+                            except PermissionError:
+                                x = 1
+                            processing = 0
+
+            try:
+                q.task_done()
+            except ValueError:
+                pass
+
+
+def check_klusta_ready(settings, directory, self=None, settings_filename=None, numThreads=None, numCores=None):
+    klusta_ready = True
+
+    # with open(settings_filename, 'r+') as f:  # opens setting file
+    #     settings = json.load(f)  # loads settings
+
+    settings['NumThreads'] = str(numThreads)
+    settings['Cores'] = str(numCores)
+
+    if settings_filename is not None:
+        # overwrite settings filename with current settings
+        with open(settings_filename, 'w') as filename:
+            json.dump(settings, filename)
+
+    if settings['NumFet'] > 4:
+
+        if self is not None:
+            self.choice = ''
+            self.LogError.myGUI_signal_str.emit('ManyFet')
+
+            while self.choice == '':
+                time.sleep(1)
+
+            if self.choice == QtWidgets.QMessageBox.No:
+                klusta_ready = False
+            elif self.choice == QtWidgets.QMessageBox.Yes:
+                klusta_ready = True
+        else:
+            print("You have chosen more than four features. clustering will take a long time!")
+
+    if directory == 'No Directory Currently Chosen!':
+
+        if self is None:
+            self.choice = ''
+            self.LogError.myGUI_signal_str.emit('NoDir')
+            while self.choice == '':
+                time.sleep(1)
+
+            if self.choice == QtWidgets.QMessageBox.Ok:
+                return False
+
+    if 'Google Drive' in directory:
+        if self is None:
+            self.choice = ''
+            self.LogError.myGUI_signal_str.emit('GoogleDir')
+            while self.choice == '':
+                time.sleep(1)
+
+            if self.choice == QtWidgets.QMessageBox.Yes:
+                klusta_ready = True
+            elif self.choice == QtWidgets.QMessageBox.No:
+                klusta_ready = False
+
+    return klusta_ready
+
+
+def check_session_files(sub_directory_fullpath, set_file, tet_list, self=None):
+    """
+    This method will ensure that all the necessary files exist before continuing.
+    :param sub_directory_fullpath:
+    :param set_file:
+    :param tet_list:
+    :param self:
+    :return:
+    """
+    error = []
+    analyzable = True
+    f_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
+
+    if not tet_list:
+
+        msg = '[%s %s]: The %s \'.set\' file has no tetrodes to analyze!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], set_file)
+
+        print_msg(self, msg)
+
+        # appends error to error list
+        error.append('\tThe ' +
+                     set_file + " '.set' file had no tetrodes to analyze, couldn't perform analysis.\n")
+        analyzable = False
+
+        # if eeg not in the f_list move the files to the missing associated file folder
+    if not set([set_file + '.eeg', set_file + '.pos']).issubset(f_list):
+        msg = '[%s %s]: There is no %s or %s file in this folder, skipping analysis!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], set_file + '.eeg', set_file + '.pos')
+
+        print_msg(self, msg)
+
+        error.append('\tThe "' + str(
+            set_file) +
+                     '" \'.set\' file was not analyzed due to not having an \'.eeg\' and a \'.pos\' file.\n')
+        analyzable = False
+
+    elif set_file + '.eeg' not in f_list:
+
+        msg = '[%s %s]: There is no %s file in this folder, skipping analysis!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], set_file + '.eeg')
+
+        print_msg(self, msg)
+
+        error.append('\tThe "' + set_file +
+                     '" \'.set\' file was not analyzed due to not having an \'.eeg\' file.\n')
+        analyzable = False
+
+        # if .pos not in the f_list move the files to the missing associated file folder
+    elif set_file + '.pos' not in f_list:
+
+        msg = '[%s %s]: There is no %s file in this folder, skipping analysis!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], set_file + '.pos')
+
+        print_msg(self, msg)
+
+        error.append('\tThe "' + set_file +
+                     '" \'.set\' file was not analyzed due to not having a \'.pos\' file.\n')
+        analyzable = False
+
+    if not analyzable:
+        associated_files = get_associated_files(f_list, set_file)
+        # associated_files = [file for file in f_list if set_file in file]
+        missing_dir = os.path.join(sub_directory_fullpath, 'MissingAssociatedFiles')
+        if not os.path.exists(missing_dir):
+            os.makedirs(missing_dir)
+
+        for file in associated_files:
+            os.rename(os.path.join(sub_directory_fullpath, file), os.path.join(missing_dir, file))
+
+    return analyzable, error
+
+
+def get_associated_files(file_list, set_filename):
+    return [file for file in file_list if set_filename == os.path.splitext(file)[0]]
+
+
+def send_email(experimenter, error, sub_directory, processed_directory, self=None):
+
+    smtpfile = os.path.join(self.SETTINGS_DIR, 'smtp.json')
+    with open(smtpfile, 'r+') as filename:
+        smtp_data = json.load(filename)
+
+        if smtp_data['Notification'] == 'On':
+
+            expter_fname = os.path.join(self.SETTINGS_DIR, 'experimenter.json')
+            with open(expter_fname, 'r+') as f:
+                expters = json.load(f)
+
+            toaddrs = []
+            for key, value in expters.items():
+                if str(key).lower() in str(experimenter).lower():
+                    if ',' in value and ', ' not in value:
+                        addresses = value.split(', ', 1)
+                        for address in addresses:
+                            toaddrs.append(address)
+                    elif ', ' in value:
+                        addresses = value.split(', ', 1)
+                        for address in addresses:
+                            toaddrs.append(address)
                     else:
+                        addresses = [value]
+                        for address in addresses:
+                            toaddrs.append(address)
 
-                        klusta(sub_directory, directory, settings, settings_filename=main_window.settings_fname,
-                               self=main_window)
+            username = smtp_data['Username']
+            password = smtp_data['Password']
 
-                except NotADirectoryError:
-                    # if the file is not a directory it prints this message
-                    main_window.LogAppend.myGUI_signal_str.emit(
-                        '[%s %s]: %s is not a directory!' % (
+            fromaddr = username
+
+            if not error:
+                error = ['\tNo errors to report on the processing of this folder!\n\n']
+
+            subject = str(sub_directory) + ' folder processed! [Automated Message]'
+
+            text_list = ['Greetings from the Batch-TINTV2 automated messaging system!\n\n',
+                         'The "' + sub_directory + '" directory has finished processing and is now located in the "' +
+                         processed_directory + '" folder.\n\n',
+                         'The errors that occurred during processing are the following:\n\n']
+
+            for i in range(len(error)):
+                text_list.append(error[i])
+
+            '''
+            for i in range(len(error)):
+                for k in range(1, int(self.settings['NumTet']) + 1):
+                    if '%s %d' % ('Tetrode', k) in error[i]:
+                        while
+                        text_list.append(error[i])
+            '''
+            text_list.append('\nHave a nice day,\n')
+            text_list.append('Batch-TINTV2\n\n')
+            text = ''.join(text_list)
+
+            # Prepare actual message
+            message = """\From: %s\nTo: %s\nSubject: %s\n\n%s
+                """ % (fromaddr, ", ".join(toaddrs), subject, text)
+
+            try:
+                # server = smtplib.SMTP('smtp.gmail.com:587')
+                server = smtplib.SMTP(str(smtp_data['ServerName']) + ':' + str(smtp_data['Port']))
+                server.ehlo()
+                server.starttls()
+                server.login(username, password)
+                server.sendmail(fromaddr, toaddrs, message)
+                server.close()
+
+                self.LogAppend.myGUI_signal_str.emit(
+                    '[%s %s]: Successfully sent e-mail to: %s!' % (
+                        str(datetime.datetime.now().date()),
+                        str(datetime.datetime.now().time())[
+                        :8], experimenter))
+            except:
+                if not toaddrs:
+                    self.LogAppend.myGUI_signal_str.emit(
+                        '[%s %s]: Failed to send e-mail, could not establish an address to send the e-mail to!' % (
                             str(datetime.datetime.now().date()),
                             str(datetime.datetime.now().time())[
-                            :8], str(sub_directory)))
+                            :8]))
+
+                else:
+                    self.LogAppend.myGUI_signal_str.emit(
+                        '[%s %s]: Failed to send e-mail, could be due to security settings of your e-mail!' % (
+                            str(datetime.datetime.now().date()),
+                            str(datetime.datetime.now().time())[
+                            :8]))
+
+
+def find_sessions(directory):
+
+    set_files = [file for file in os.listdir(directory) if '.set' in file and
+                 os.path.splitext(file)[0]]
+
+    return set_files
+
+
+def find_tetrodes(session, directory):
+    """returns a list of tetrode files given a session and directory name"""
+    session_basename = os.path.splitext(session)[0]
+
+    invalid_types = ['.clu', '.eeg', '.egf', '.set', '.cut', '.fmask', '.fet', '.klg', '.pos', '.SET', '.ini', '.txt']
+    tetrodes = [file for file in os.listdir(directory)
+                if not any(x in file for x in invalid_types) and not os.path.isdir(os.path.join(directory, file))
+                and any('%s.%d' % (session_basename, i) in file for i in range(1, 257))]
+    return tetrodes
+
+
+def session_analyzable(directory, session, tetrodes):
+    session_basename = os.path.splitext(session)[0]
+    analyzable = [file for file in tetrodes if not os.path.exists(os.path.join(directory,
+                                                                                '%s_%s.cut' % (session_basename,
+                                                                                               os.path.splitext(file)[
+                                                                                                   1][1:])))]
+    if analyzable:
+        return True
+    else:
+        return False
+
+
+def folder_ready(main_window, directory):
+    """ensures that the folder is done copying/moving"""
+    try:
+        contents = os.listdir(directory)  # lists the contents of the directory (folders)
+    except FileNotFoundError:
+        return True
+
+    consecutive_same_size = 0
+    dirmtime = os.stat(directory).st_mtime  # finds the modification time of the file
+    #print(threading.current_thread().name)
+    time.sleep(5)
+
+    # creation of a while loop that will constantly check for new folders added to the directory
+    newmtime = os.stat(directory).st_mtime  # finds the new modification time
+
+    if newmtime != dirmtime:  # only execute if the new mod time doesn't equal the old mod time
+        dirmtime = newmtime  # sets the mod time to the new mod time for future iterations
+        # lists the new contents of the directory including added folders
+
+        start_path = directory
+        total_size_old = 0
+        file_complete = False
+
+        while not file_complete:
+            newcontents = os.listdir(directory)
+            # finds the differences between the contents to state the files that were added
+            added = list(set(newcontents).difference(contents))
+            # added = list(added) #converts added to a list
+
+            if added:  # runs if added exists as a variable
+
+                time.sleep(5)
+
+                consecutive_same_size = 0
+                contents = newcontents
+                continue
+
+            total_size = 0
+            for dirpath, dirnames, filenames in os.walk(start_path):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    total_size += os.path.getsize(fp)
+
+                    main_window.LogAppend.myGUI_signal_str.emit(
+                        '[%s %s]: %s is downloading... (%s bytes downloaded)!' % (
+                            str(datetime.datetime.now().date()),
+                            str(datetime.datetime.now().time())[
+                            :8], start_path, str(total_size)))
+
+            # if total_size > total_size_old and len(start_path) > count_old:
+            if total_size > total_size_old:
+                consecutive_same_size = 0
+                total_size_old = total_size
+
+                time.sleep(5)
+
+            elif total_size == total_size_old:
+
+                if consecutive_same_size == 0:
+                    consecutive_same_size = 1
                     continue
 
+                main_window.LogAppend.myGUI_signal_str.emit(
+                    '[%s %s]: %s has finished downloading!' % (
+                        str(datetime.datetime.now().date()),
+                        str(datetime.datetime.now().time())[
+                        :8], start_path))
+                file_complete = True
 
-def run():
-    app = QtWidgets.QApplication(sys.argv)
-
-    main_w = Window()  # calling the main window
-    chooseDirectory_w = chooseDirectory()  # calling the Choose Directory Window
-    settings_w = Settings_Window()  # calling the settings window
-    smtp_setting_w = SmtpSettings()  # calling the smtp settings window
-    add_exper = AddExpter()
-
-    add_exper.addbtn.clicked.connect(lambda: add_Expter(add_exper, smtp_setting_w))
-    # syncs the current directory on the main window
-    chooseDirectory_w.current_directory_name = main_w.current_directory_name
-
-    main_w.raise_()  # making the main window on top
-
-    add_exper.cancelbtn.clicked.connect(lambda: cancel_window(smtp_setting_w, add_exper))
-    add_exper.backbtn.clicked.connect(lambda: raise_window(smtp_setting_w, add_exper))
-
-    smtp_setting_w.addbtn.clicked.connect(lambda: raise_window(add_exper, smtp_setting_w))
-
-    main_w.silent_cb.stateChanged.connect(lambda: silent(main_w, main_w.silent_cb.isChecked()))
-    main_w.nonbatch_check.stateChanged.connect(lambda: nonbatch(main_w, main_w.nonbatch_check.isChecked()))
-    # brings the directory window to the foreground
-    main_w.choose_dir.clicked.connect(lambda: raise_window(chooseDirectory_w, main_w))
-
-    # brings the main window to the foreground
-    chooseDirectory_w.backbtn.clicked.connect(lambda: raise_window(main_w, chooseDirectory_w))
-    chooseDirectory_w.applybtn.clicked.connect(lambda: chooseDirectory_w.apply_dir(main_w))
-    # brings the main window to the foreground
-
-    main_w.setbtn.clicked.connect(lambda: raise_window(settings_w, main_w))
-
-    main_w.smtpbtn.clicked.connect(lambda: raise_window(smtp_setting_w, main_w))
-
-    smtp_setting_w.backbtn.clicked.connect(lambda: raise_window(main_w, smtp_setting_w))
-
-    settings_w.backbtn.clicked.connect(lambda: raise_window(main_w, settings_w))
-
-    settings_w.backbtn2.clicked.connect(lambda: raise_window(main_w, settings_w))
-
-    # prompts the user to choose a directory
-    chooseDirectory_w.dirbtn.clicked.connect(lambda: new_directory(chooseDirectory_w, main_w))
-
-    sys.exit(app.exec_())  # prevents the window from immediately exiting out
-
-
-if __name__ == "__main__":
-    run()  # the command that calls run()
+    else:
+        return True
