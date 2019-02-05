@@ -134,3 +134,14 @@ def cancel_window(new_window, old_window):
     if 'SmtpSettings' in str(new_window) and 'AddExpter' in str(old_window): # needs to clear the text files
         old_window.expter_edit.setText('')
         old_window.email_edit.setText('')
+
+
+Large_Font = ("Verdana", 12)  # defines two fonts for different purposes (might not be used
+Small_Font = ("Verdana", 8)
+
+
+class Communicate(QtCore.QObject):
+    """A custom pyqtsignal so that errors and popups can be called from the threads
+    to the main window"""
+    myGUI_signal_str = QtCore.pyqtSignal(str)
+    myGUI_signal_QTreeWidgetItem = QtCore.pyqtSignal(QtWidgets.QTreeWidgetItem)

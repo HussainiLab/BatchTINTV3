@@ -100,3 +100,9 @@ class chooseDirectory(QtWidgets.QWidget):
         # main.current_directory_name = self.current_directory_name
 
         self.backbtn.animateClick()
+
+
+def new_directory(self, main):
+    """This method will look open a dialog and prompt the user to select a directory,"""
+    current_directory_name = str(QtWidgets.QFileDialog.getExistingDirectory(self, "Select Directory"))
+    self.current_directory_e.setText(current_directory_name)

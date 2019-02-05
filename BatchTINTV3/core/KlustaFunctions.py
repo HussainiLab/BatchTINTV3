@@ -25,7 +25,16 @@ def get_tetrode_files(file_list, session):
 
 
 def klusta(sub_directory, directory, settings, settings_filename=None, self=None):
+    """
+    This method will perform the klusta analysis of the settings
 
+    :param sub_directory:
+    :param directory:
+    :param settings:
+    :param settings_filename:
+    :param self:
+    :return:
+    """
     msg = '[%s %s]: Now analyzing files in the %s folder!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
