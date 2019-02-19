@@ -110,12 +110,25 @@ def raise_window(new_window, old_window):
         new_window.raise_()
         new_window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         new_window.show()
-        time.sleep(0.1)
+        # time.sleep(0.1)
 
     elif "Choose" in str(old_window):
-        time.sleep(0.1)
+        # time.sleep(0.1)
         old_window.hide()
         return
+
+    elif "Settings" in str(new_window):
+        new_window.raise_window()
+        # time.sleep(0.1)
+        old_window.hide()
+
+    elif "Settings" in str(old_window):
+        new_window.raise_()
+        new_window.show()
+
+        old_window.backbtn_function()
+        old_window.hide()
+
     else:
         new_window.raise_()
         new_window.show()

@@ -1,5 +1,8 @@
 from PyQt5 import QtCore, QtWidgets
 from core.utils import background, center
+from core.defaultParameters import defaultServerName, defaultPort, defaultUsername, defaultPassword, \
+    defaultNotification
+
 import os, json
 
 
@@ -7,7 +10,6 @@ class SmtpSettings(QtWidgets.QWidget):
     def __init__(self):
         super(SmtpSettings, self).__init__()
         background(self)
-        # deskW, deskH = background.Background(self)
         width = self.deskW / 3
         height = self.deskH / 3
         self.setGeometry(0, 0, width, height)
@@ -20,11 +22,11 @@ class SmtpSettings(QtWidgets.QWidget):
         except FileNotFoundError:
             with open(self.smtpfile, 'w') as filename:
                 self.smtp_data = {}
-                self.smtp_data['ServerName'] = 'smtp.gmail.com'
-                self.smtp_data['Port'] = '587'
-                self.smtp_data['Username'] = ''
-                self.smtp_data['Password'] = ''
-                self.smtp_data['Notification'] = 'Off'
+                self.smtp_data['ServerName'] = defaultServerName
+                self.smtp_data['Port'] = defaultPort
+                self.smtp_data['Username'] = defaultUsername
+                self.smtp_data['Password'] = defaultPassword
+                self.smtp_data['Notification'] = defaultNotification
                 json.dump(self.smtp_data, filename)
 
         self.setWindowTitle("BatchTINT - SMTP Settings")
@@ -60,7 +62,6 @@ class SmtpSettings(QtWidgets.QWidget):
         rembtn.clicked.connect(self.removeItems)
 
         self.addbtn = QtWidgets.QPushButton('Add Experimenter', self)
-        # self.addbtn.clicked.connect(self.add_expter)
 
         server_name_l = QtWidgets.QLabel('Server Name: ')
         self.server_name_edit = QtWidgets.QLineEdit()
@@ -120,10 +121,8 @@ class SmtpSettings(QtWidgets.QWidget):
         btn_layout = QtWidgets.QHBoxLayout()
         btn_order = [applybtn, self.addbtn, rembtn, self.backbtn]
 
-        # btn_layout.addStretch(1)
         for butn in btn_order:
             btn_layout.addWidget(butn)
-            # btn_layout.addStretch(1)
 
         layout_order = [self.notification_cb, server_layout, user_layout, self.expterList, btn_layout]
 
@@ -136,7 +135,6 @@ class SmtpSettings(QtWidgets.QWidget):
         self.setLayout(layout)
 
         center(self)
-        # self.show()
 
     def removeItems(self):
         root = self.expterList.invisibleRootItem()
@@ -182,7 +180,6 @@ class SmtpSettings(QtWidgets.QWidget):
             self.backbtn.animateClick()
 
     def NotificationStatus(self):
-        # self.smtp_data = {}
         with open(self.smtpfile, 'r+') as filename:
             self.smtp_data = json.load(filename)
 

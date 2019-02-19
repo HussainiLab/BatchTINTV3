@@ -8,6 +8,8 @@ from core.smtpSettings import SmtpSettings, AddExpter, add_Expter
 from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready, find_tetrodes, session_analyzable
 from core.ChooseDirectory import chooseDirectory, new_directory
 from core.addSessions import RepeatAddSessions
+from core.utils import print_msg
+# from core.defaultParameters import DebugSkipKlusta
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
 
@@ -16,11 +18,13 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
     def __init__(self):  # initializes the main window
         super(Window, self).__init__()
-        # self.setGeometry(50, 50, 500, 300)
+
         background(self)  # acquires some features from the background function we defined earlier
         self.setWindowTitle("BatchTINT - Main Window")  # sets the title of the window
 
         self.numCores = str(os.cpu_count())  # initializing the number of cores the users CPU has
+
+        self.settingsWindow = None
 
         self.RepeatAddSessionsThread = QtCore.QThread(self)
         self.BatchTintThread = QtCore.QThread()
@@ -49,6 +53,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
         self.adding_session = True
         self.reordering_queue = False
+        self.modifying_list = False
 
         self.choice = ''
         self.home()  # runs the home function
@@ -229,8 +234,6 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
         center(self)  # centers the widget on the screen
 
-        self.show()  # shows the widget
-
         # if self.current_directory_name != 'No Directory Currently Chosen!':
         # starting adding any existing sessions in a different thread
         # self.RepeatAddSessionsThread = QtCore.QThread(self)
@@ -238,6 +241,8 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.RepeatAddSessionsWorker = Worker(RepeatAddSessions, self)
         self.RepeatAddSessionsWorker.moveToThread(self.RepeatAddSessionsThread)
         self.RepeatAddSessionsWorker.start.emit("start")
+
+        self.show()  # shows the widget
 
     def run(self, directory):  # function that runs klustakwik
 
@@ -252,7 +257,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         # self.BatchTintThread = QtCore.QThread()
         self.BatchTintThread.start()
 
-        self.BatchTintWorker = Worker(runGUI, self, directory)
+        self.BatchTintWorker = Worker(runGUI, self, self.settingsWindow, directory)
         self.BatchTintWorker.moveToThread(self.BatchTintThread)
         self.BatchTintWorker.start.emit("start")
 
@@ -320,6 +325,9 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.Log.append(message)
 
     def stopBatch(self):
+
+        enableParameters(self)
+
         self.klustabtn.clicked.connect(lambda: self.run(self.current_directory_name))
         self.BatchTintThread.terminate()
 
@@ -366,15 +374,12 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.RepeatAddSessionsWorker.start.emit("start")
 
     def moveQueue(self, direction):
-        """This method is not threaded"""
         # get all the queue items
 
         while self.adding_session:
             if self.reordering_queue:
                 self.reordering_queue = False
-            time.sleep(0.1)
 
-        time.sleep(0.1)
         self.reordering_queue = True
 
         item_count = self.directory_queue.topLevelItemCount()
@@ -425,6 +430,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
             _ = list(new_queue_order.keys())  # a list of already moved items
 
+            not_in_reordered = False
             # place the unplaced items that aren't moving
             for static_index, static_value in queue_items.items():
                 # print(static_value.data(0,0))
@@ -471,6 +477,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
             _ = list(new_queue_order.keys())  # a list of already moved items
 
+            not_in_reordered = False
             # place the unplaced items that aren't moving
             for static_index, static_value in queue_items.items():
                 if static_index in _:
@@ -535,21 +542,56 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         (QTreeWidgetItem.parent() or root).removeChild(QTreeWidgetItem)
         self.child_removed = True
 
+    def getMainWindowSettings(self):
 
+        settings = {}
+
+        if self.silent_cb.isChecked():
+            settings['Silent'] = 1
+        else:
+            settings['Silent'] = 0
+
+        if self.nonbatch_check.isChecked():
+            settings['nonbatch'] = 1
+            self.nonbatch = 1
+        else:
+            settings['nonbatch'] = 0
+            self.nonbatch = 0
+
+        settings['NumThreads'] = self.numThreads.text()
+
+        settings['Cores'] = str(os.cpu_count())
+
+        return settings
+
+
+'''
 def silent(self, state):
+    """
+    This is the function that will run when the silent checkbox is checked/unchecked
+    :param self:
+    :param state:
+    :return:
+    """
     with open(self.settings_fname, 'r+') as filename:
         settings = json.load(filename)
         if state:
             settings['Silent'] = 1
         else:
             settings['Silent'] = 0
+
     with open(self.settings_fname, 'w') as filename:
         json.dump(settings, filename)
 
 
 def nonbatch(self, state):
-    self.directory_queue.clear()
-    self.restart_add_sessions_thread()
+    """
+    This is the function that will run when the non-batch checkbox is checked/unchecked
+
+    :param self:
+    :param state:
+    :return:
+    """
 
     with open(self.settings_fname, 'r+') as filename:
         settings = json.load(filename)
@@ -562,22 +604,93 @@ def nonbatch(self, state):
     with open(self.settings_fname, 'w') as filename:
         json.dump(settings, filename)
 
+    self.directory_queue.clear()
+    self.restart_add_sessions_thread()
 
-def runGUI(main_window, directory):
+'''
+
+
+def disableParameters(main_window):
+    main_window.numThreads.setEnabled(0)
+    main_window.silent_cb.setEnabled(0)
+    main_window.nonbatch_check.setEnabled(0)
+    main_window.choose_dir.setEnabled(0)
+    main_window.setbtn.setEnabled(0)
+    main_window.current_directory.setEnabled(0)
+
+
+def enableParameters(main_window):
+    main_window.numThreads.setEnabled(1)
+    main_window.silent_cb.setEnabled(1)
+    main_window.nonbatch_check.setEnabled(1)
+    main_window.choose_dir.setEnabled(1)
+    main_window.setbtn.setEnabled(1)
+    main_window.current_directory.setEnabled(1)
+
+
+def getNextSetFiles(self):
+
+    set_files = []
+
+    subdirectory = self.directory_item.data(0, 0)
+    for i in range(self.directory_item.childCount()):
+        session_item = self.directory_item.child(i)
+        set_files.append(os.path.join(self.current_directory.text(), subdirectory, session_item.data(0, 0)))
+
+    return set_files
+
+
+def getSetFileChildNumber(self, set_file):
+
+    subdirectory = self.directory_item.data(0, 0)
+    for i in range(self.directory_item.childCount()):
+        session_item = self.directory_item.child(i)
+        current_setfile = os.path.join(self.current_directory.text(), subdirectory, session_item.data(0, 0))
+        if set_file == current_setfile:
+            return i
+
+    return None
+
+
+def runGUI(main_window, settings_window, directory):
     """This method is executed when you press 'Run' in the GUI."""
     # ------- making a function that runs the entire GUI ----------
 
+    # overwrite with the latest settings file data
+
+    disableParameters(main_window)
+
+    main_settings = main_window.getMainWindowSettings()
+
     with open(main_window.settings_fname, 'r+') as f:  # opens settings file
-        settings = json.load(f)  # loads settings
+        written_settings = json.load(f)  # loads settings
+
+    for key, value in main_settings.items():
+        written_settings[key] = value
+
+    with open(main_window.settings_fname, 'w') as f:
+        json.dump(written_settings, f)
+
+    settings = {}
+
+    # the advanced / basic settings have an Apply functionality that will save those settings, therefore we will not
+    # include them in overwriting the settings above.
+    basic_settings = settings_window.get_basic_settings()
+    advanced_settings = settings_window.get_advanced_settings()
+
+    settings.update(basic_settings)
+    settings.update(advanced_settings)
+    settings.update(main_settings)
+
+    main_window.numThreads.setEnabled(0)
 
     # checks if the settings are appropriate to run analysis
     klusta_ready = check_klusta_ready(settings, directory, self=main_window,
                                       settings_filename=main_window.settings_fname,
-                                      numThreads=main_window.numThreads.text(),
-                                      numCores=main_window.numCores)
+                                      numThreads=settings['NumThreads'],
+                                      numCores=settings['Cores'])
 
     if klusta_ready:
-
         main_window.LogAppend.myGUI_signal_str.emit(
             '[%s %s]: Analyzing the following directory: %s!' % (str(datetime.datetime.now().date()),
                                                                  str(datetime.datetime.now().time())[
@@ -615,26 +728,28 @@ def runGUI(main_window, directory):
         # ----------- cycle through each file and find the tetrode files ------------------------------------------
 
         while main_window.batch_tint:
-
+            # grabs the top item from the queue
             main_window.directory_item = main_window.directory_queue.topLevelItem(0)
 
             if not main_window.directory_item:
                 continue
             else:
+                # grab the subdirectory of the item object
                 main_window.current_subdirectory = main_window.directory_item.data(0, 0)
 
                 # check if the directory exists, if not, remove it
-
                 if not os.path.exists(os.path.join(directory, main_window.current_subdirectory)):
+                    # path does not exist, remove
                     main_window.top_level_taken = False
+                    main_window.modifying_list = True
                     main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
                     while not main_window.top_level_taken:
                         time.sleep(0.1)
-                    # main_window.directory_queue.takeTopLevelItem(0)
+                    main_window.modifying_list = False
                     continue
 
+            # if there are sessions within the subdirectory, analyze them
             while main_window.directory_item.childCount() != 0:
-
                 # set the current session
                 main_window.current_session = main_window.directory_item.child(0).data(0, 0)
 
@@ -651,31 +766,42 @@ def runGUI(main_window, directory):
                 while not directory_ready:
                     directory_ready = folder_ready(main_window, os.path.join(directory, sub_directory))
 
-                if main_window.directory_item.childCount() == 0:
-                    # deletes sub-directory if there are no sessions left
-                    main_window.top_level_taken = False
-                    main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
-                    while not main_window.top_level_taken:
-                        time.sleep(0.1)
                 try:
-
                     # runs the function that will perform the klusta'ing
                     if not os.path.exists(os.path.join(directory, sub_directory)):
                         main_window.top_level_taken = False
+                        main_window.modifying_list = True
                         main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
                         while not main_window.top_level_taken:
                             time.sleep(0.1)
+                        main_window.modifying_list = False
                         continue
                     else:
 
-                        klusta(sub_directory, directory, settings, settings_filename=main_window.settings_fname,
-                               self=main_window)
+                        msg = '[%s %s]: Now analyzing files in the %s folder!' % (
+                            str(datetime.datetime.now().date()),
+                            str(datetime.datetime.now().time())[
+                            :8], sub_directory)
 
-                        # removes session from list
-                        main_window.child_data_taken = False
-                        main_window.RemoveSessionData.myGUI_signal_str.emit(str(0))
-                        while not main_window.child_data_taken:
-                            time.sleep(0.1)
+                        print_msg(main_window, msg)
+
+                        main_window.current_subdirectory = os.path.basename(sub_directory)
+
+                        set_files = getNextSetFiles(main_window)
+
+                        # if not DebugSkipKlusta:
+                        klusta(set_files, settings, self=main_window)
+
+                        for file in set_files:
+                            childNum = getSetFileChildNumber(main_window, file)
+
+                            # removes session from list
+                            main_window.child_data_taken = False
+                            main_window.modifying_list = True
+                            main_window.RemoveSessionData.myGUI_signal_str.emit(str(childNum))
+                            while not main_window.child_data_taken:
+                                time.sleep(0.1)
+                            main_window.modifying_list = False
 
                 except NotADirectoryError:
                     # if the file is not a directory it prints this message
@@ -686,6 +812,18 @@ def runGUI(main_window, directory):
                             :8], str(sub_directory)))
                     continue
 
+            if main_window.directory_item.childCount() == 0:
+                # deletes sub-directory if there are no sessions left
+                main_window.top_level_taken = False
+                main_window.modifying_list = True
+                main_window.RemoveQueueItem.myGUI_signal_str.emit(str(0))
+                while not main_window.top_level_taken:
+                    time.sleep(0.1)
+                main_window.modifying_list = False
+
+                main_window.current_subdirectory = ''
+                main_window.current_session = ''
+
 
 def run():
     app = QtWidgets.QApplication(sys.argv)
@@ -695,6 +833,8 @@ def run():
     settings_w = Settings_Window()  # calling the settings window
     smtp_setting_w = SmtpSettings()  # calling the smtp settings window
     add_exper = AddExpter()
+
+    main_w.settingsWindow = settings_w
 
     add_exper.addbtn.clicked.connect(lambda: add_Expter(add_exper, smtp_setting_w))
     # syncs the current directory on the main window
@@ -707,8 +847,10 @@ def run():
 
     smtp_setting_w.addbtn.clicked.connect(lambda: raise_window(add_exper, smtp_setting_w))
 
-    main_w.silent_cb.stateChanged.connect(lambda: silent(main_w, main_w.silent_cb.isChecked()))
-    main_w.nonbatch_check.stateChanged.connect(lambda: nonbatch(main_w, main_w.nonbatch_check.isChecked()))
+    # setup the callback for when the silent checkbox is pressed
+    # main_w.silent_cb.stateChanged.connect(lambda: silent(main_w, main_w.silent_cb.isChecked()))
+    # setup the callback for when the non-batch checkbox is pressed
+    # main_w.nonbatch_check.stateChanged.connect(lambda: nonbatch(main_w, main_w.nonbatch_check.isChecked()))
     # brings the directory window to the foreground
     main_w.choose_dir.clicked.connect(lambda: raise_window(chooseDirectory_w, main_w))
 

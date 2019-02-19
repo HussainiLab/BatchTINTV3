@@ -24,28 +24,15 @@ def get_tetrode_files(file_list, session):
     return tetrode_files
 
 
-def klusta(sub_directory, directory, settings, settings_filename=None, self=None):
+def klusta(set_files, settings, self=None):
     """
     This method will perform the klusta analysis of the settings
-
-    :param sub_directory:
-    :param directory:
-    :param settings:
-    :param settings_filename:
-    :param self:
-    :return:
     """
-    msg = '[%s %s]: Now analyzing files in the %s folder!' % (
-                str(datetime.datetime.now().date()),
-                str(datetime.datetime.now().time())[
-                :8], sub_directory)
 
-    print_msg(self, msg)
-
-    if self is not None:
-        self.current_subdirectory = os.path.basename(sub_directory)
-
-    sub_directory_fullpath = os.path.join(directory, sub_directory)  # defines fullpath
+    # sub_directory_fullpath = os.path.join(directory, sub_directory)  # defines fullpath
+    sub_directory_fullpath = os.path.dirname(set_files[0])
+    sub_directory = os.path.basename(os.path.dirname(set_files[0]))
+    directory = os.path.dirname(sub_directory_fullpath)
 
     logfile_directory = os.path.join(sub_directory_fullpath, 'LogFiles')  # defines directory for log files
     inifile_directory = os.path.join(sub_directory_fullpath, 'IniFiles')  # defines directory for .ini files
@@ -58,7 +45,7 @@ def klusta(sub_directory, directory, settings, settings_filename=None, self=None
 
     f_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
 
-    set_files = [file for file in f_list if '.set' in file]  # fines .set files
+    # set_files = [file for file in f_list if '.set' in file]  # fines .set files
 
     if len(set_files) > 1:  # displays messages counting how many set files in directory
         msg = '[%s %s]: There are %d \'.set\' files in this directory!' % (
@@ -82,6 +69,8 @@ def klusta(sub_directory, directory, settings, settings_filename=None, self=None
     error = []  # initializing error list
     for i in range(len(set_files)):  # loops through each set file
         set_file = os.path.splitext(set_files[i])[0]  # define set file without extension
+        set_file = os.path.basename(set_file)  # we needed to add this because we changed the functionality
+        # set file used to not include the filepath, just the basename, so we will remove the filepath
         set_path = os.path.join(sub_directory_fullpath, set_file)  # defines set file path
 
         msg = '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
@@ -136,6 +125,7 @@ def klusta(sub_directory, directory, settings, settings_filename=None, self=None
         else:
             error.extend(error_return)
             continue
+
     msg = '[%s %s]: Analysis in the %s directory has been completed!' % (
             str(datetime.datetime.now().date()),
             str(datetime.datetime.now().time())[
@@ -152,13 +142,12 @@ def klusta(sub_directory, directory, settings, settings_filename=None, self=None
 
     processing = 1
     while processing == 1:
-        time.sleep(1)
+        time.sleep(0.1)
         processing = 0
         try:
             # moves the entire folder to the processed folder
             if os.path.exists(directory_destination):
                 try:
-                    # shutil.copytree(directory_source, directory_destination)
                     copy_tree(directory_source, directory_destination)
                 except PermissionError:
                     return
@@ -167,10 +156,6 @@ def klusta(sub_directory, directory, settings, settings_filename=None, self=None
                 shutil.move(directory_source, processed_directory)
         except PermissionError:
             processing = 1
-
-    if self is not None:
-        self.current_subdirectory = ''
-        self.current_session = ''
 
 
 def analyze_tetrode(q, settings,  experimenter,
@@ -708,11 +693,21 @@ def find_tetrodes(session, directory):
     """returns a list of tetrode files given a session and directory name"""
     session_basename = os.path.splitext(session)[0]
 
-    invalid_types = ['.clu', '.eeg', '.egf', '.set', '.cut', '.fmask', '.fet', '.klg', '.pos', '.SET', '.ini', '.txt']
     tetrodes = [file for file in os.listdir(directory)
-                if not any(x in file for x in invalid_types) and not os.path.isdir(os.path.join(directory, file))
-                and any('%s.%d' % (session_basename, i) in file for i in range(1, 257))]
+                if is_tetrode(file, session_basename)]
     return tetrodes
+
+
+def is_tetrode(file, session):
+
+    if os.path.splitext(file)[0] == session:
+        try:
+            tetrode_number = int(os.path.splitext(file)[1][1:])
+            return True
+        except ValueError:
+            return False
+    else:
+        return False
 
 
 def session_analyzable(directory, session, tetrodes):
@@ -736,7 +731,7 @@ def folder_ready(main_window, directory):
 
     consecutive_same_size = 0
     dirmtime = os.stat(directory).st_mtime  # finds the modification time of the file
-    #print(threading.current_thread().name)
+
     time.sleep(5)
 
     # creation of a while loop that will constantly check for new folders added to the directory
@@ -754,7 +749,6 @@ def folder_ready(main_window, directory):
             newcontents = os.listdir(directory)
             # finds the differences between the contents to state the files that were added
             added = list(set(newcontents).difference(contents))
-            # added = list(added) #converts added to a list
 
             if added:  # runs if added exists as a variable
 

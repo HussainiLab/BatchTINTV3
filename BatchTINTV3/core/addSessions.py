@@ -12,7 +12,7 @@ def addSessions(self):
     :return:
     """
     # doesn't add sessions when re-ordering
-    while self.reordering_queue:
+    while self.reordering_queue or self.modifying_list:
         # pauses add Sessions when the individual is reordering
         time.sleep(0.1)
 
@@ -41,14 +41,16 @@ def addSessions(self):
         directory_item = iterator.value()
 
         # check if directory still exists
-        if not os.path.exists(os.path.join(current_directory, directory_item.data(0, 0))) and \
+        check_directory = os.path.join(current_directory, directory_item.data(0, 0))
+
+        if not os.path.exists(check_directory) and \
                         '.set' not in directory_item.data(0, 0):
             # then remove from the list since it doesn't exist anymore
-            root = self.directory_queue.invisibleRootItem()
-            for child_index in range(root.childCount()):
-                if root.child(child_index) == directory_item:
-                    self.RemoveChildItem.myGUI_signal_QTreeWidgetItem.emit(directory_item)
-                    # root.removeChild(directory_item)
+            if os.path.basename(check_directory) != self.current_subdirectory:
+                root = self.directory_queue.invisibleRootItem()
+                for child_index in range(root.childCount()):
+                    if root.child(child_index) == directory_item:
+                        self.RemoveChildItem.myGUI_signal_QTreeWidgetItem.emit(directory_item)
         else:
             added_directories.append(directory_item.data(0, 0))
 
@@ -82,7 +84,6 @@ def addSessions(self):
                 try:
                     iterator = QtWidgets.QTreeWidgetItemIterator(directory_item)
                 except UnboundLocalError:
-                    # print('hello')
                     return
                 except RuntimeError:
                     return
