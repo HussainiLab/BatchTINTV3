@@ -67,6 +67,7 @@ def klusta(set_files, settings, self=None):
     skipped = 0
     experimenter = []  # initializing experimenter list
     error = []  # initializing error list
+    analyzed_set_files = []
     for i in range(len(set_files)):  # loops through each set file
         set_file = os.path.splitext(set_files[i])[0]  # define set file without extension
         set_file = os.path.basename(set_file)  # we needed to add this because we changed the functionality
@@ -121,10 +122,13 @@ def klusta(set_files, settings, self=None):
                 # q.join()
                 for t in Threads:
                     t.join()
+
             q.join()
         else:
             error.extend(error_return)
             continue
+
+        analyzed_set_files.append(os.path.join(sub_directory_fullpath, set_file + '.set'))
 
     msg = '[%s %s]: Analysis in the %s directory has been completed!' % (
             str(datetime.datetime.now().date()),
@@ -156,6 +160,8 @@ def klusta(set_files, settings, self=None):
                 shutil.move(directory_source, processed_directory)
         except PermissionError:
             processing = 1
+
+    return analyzed_set_files
 
 
 def analyze_tetrode(q, settings,  experimenter,

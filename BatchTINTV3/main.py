@@ -565,51 +565,6 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         return settings
 
 
-'''
-def silent(self, state):
-    """
-    This is the function that will run when the silent checkbox is checked/unchecked
-    :param self:
-    :param state:
-    :return:
-    """
-    with open(self.settings_fname, 'r+') as filename:
-        settings = json.load(filename)
-        if state:
-            settings['Silent'] = 1
-        else:
-            settings['Silent'] = 0
-
-    with open(self.settings_fname, 'w') as filename:
-        json.dump(settings, filename)
-
-
-def nonbatch(self, state):
-    """
-    This is the function that will run when the non-batch checkbox is checked/unchecked
-
-    :param self:
-    :param state:
-    :return:
-    """
-
-    with open(self.settings_fname, 'r+') as filename:
-        settings = json.load(filename)
-        if state:
-            settings['nonbatch'] = 1
-            self.nonbatch = 1
-        else:
-            settings['nonbatch'] = 0
-            self.nonbatch = 0
-    with open(self.settings_fname, 'w') as filename:
-        json.dump(settings, filename)
-
-    self.directory_queue.clear()
-    self.restart_add_sessions_thread()
-
-'''
-
-
 def disableParameters(main_window):
     main_window.numThreads.setEnabled(0)
     main_window.silent_cb.setEnabled(0)
@@ -790,9 +745,9 @@ def runGUI(main_window, settings_window, directory):
                         set_files = getNextSetFiles(main_window)
 
                         # if not DebugSkipKlusta:
-                        klusta(set_files, settings, self=main_window)
+                        analyzed_files = klusta(set_files, settings, self=main_window)
 
-                        for file in set_files:
+                        for file in analyzed_files:
                             childNum = getSetFileChildNumber(main_window, file)
 
                             # removes session from list
@@ -847,11 +802,6 @@ def run():
 
     smtp_setting_w.addbtn.clicked.connect(lambda: raise_window(add_exper, smtp_setting_w))
 
-    # setup the callback for when the silent checkbox is pressed
-    # main_w.silent_cb.stateChanged.connect(lambda: silent(main_w, main_w.silent_cb.isChecked()))
-    # setup the callback for when the non-batch checkbox is pressed
-    # main_w.nonbatch_check.stateChanged.connect(lambda: nonbatch(main_w, main_w.nonbatch_check.isChecked()))
-    # brings the directory window to the foreground
     main_w.choose_dir.clicked.connect(lambda: raise_window(chooseDirectory_w, main_w))
 
     # brings the main window to the foreground

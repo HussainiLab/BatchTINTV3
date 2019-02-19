@@ -56,12 +56,6 @@ class Settings_Window(QtWidgets.QTabWidget):
                                'A', 'Vt', 'P', 'T',
                                'tP', 'tT', 'En', 'Ar']
 
-        '''
-        for feat in self.clust_ft_names:
-            if feat != '':
-                self.set_feats[feat] = 0
-        '''
-
         self.clust_ft_cbs = {}
 
         positions = [(i, j) for i in range(4) for j in range(4)]
@@ -73,8 +67,6 @@ class Settings_Window(QtWidgets.QTabWidget):
             self.position[clust_ft_name] = position
             self.clust_ft_cbs[position] = QtWidgets.QCheckBox(clust_ft_name)
             grid_ft.addWidget(self.clust_ft_cbs[position], *position)
-            '''self.clust_ft_cbs[position].stateChanged.connect(
-                functools.partial(self.channel_feats, clust_ft_name, position))'''
 
         clust_feat_lay = QtWidgets.QHBoxLayout()
         clust_feat_lay.addWidget(clust_l)
@@ -99,8 +91,6 @@ class Settings_Window(QtWidgets.QTabWidget):
             self.position[option] = position
             self.report_cbs[position] = QtWidgets.QCheckBox(option)
             grid_report.addWidget(self.report_cbs[position], *position)
-            '''self.report_cbs[position].stateChanged.connect(
-                functools.partial(self.reporting_options, option, position))'''
 
         grid_lay = QtWidgets.QHBoxLayout()
         grid_lay.addWidget(report_l)
@@ -113,11 +103,6 @@ class Settings_Window(QtWidgets.QTabWidget):
         grid_chan = QtWidgets.QGridLayout()
         self.chan_names = ['1', '2', '3', '4']
 
-        '''
-        for chan in self.chan_names:
-            self.set_chan_inc[chan] = 0
-        '''
-
         self.chan_inc_cbs = {}
 
         positions = [(i, j) for i in range(1) for j in range(4)]
@@ -129,9 +114,6 @@ class Settings_Window(QtWidgets.QTabWidget):
             self.position[chan_name] = position
             self.chan_inc_cbs[position] = QtWidgets.QCheckBox(chan_name)
             grid_chan.addWidget(self.chan_inc_cbs[position], *position)
-            '''self.chan_inc_cbs[position].stateChanged.connect(
-                functools.partial(self.channel_include, chan_name, position))
-            self.chan_inc_cbs[position].setToolTip('Include channel ' + str(chan_name) + ' in the analysis.')'''
 
         chan_name_lay = QtWidgets.QHBoxLayout()
         chan_name_lay.addWidget(chan_inc)
@@ -358,30 +340,6 @@ class Settings_Window(QtWidgets.QTabWidget):
                     if int(self.settings[option]) == 1:
                         self.report_cbs[self.position[option]].toggle()
         center(self)
-
-    '''
-    def reporting_options(self, option, position):
-        if self.report_cbs[position].isChecked():
-            self.reporting[option] = 1
-        else:
-            self.reporting[option] = 0
-    '''
-
-    '''
-    def channel_feats(self, clust_ft_name, position):
-        if self.clust_ft_cbs[position].isChecked():
-            self.set_feats[clust_ft_name] = 1
-        else:
-            self.set_feats[clust_ft_name] = 0
-    '''
-
-    '''
-    def channel_include(self, channel_name, position):
-        if self.chan_inc_cbs[position].isChecked():
-            self.set_chan_inc[channel_name] = 1
-        else:
-            self.set_chan_inc[channel_name] = 0
-    '''
 
     def adv_default(self):
         """
