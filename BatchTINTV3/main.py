@@ -746,8 +746,9 @@ def runGUI(main_window, settings_window, directory):
 
                         # if not DebugSkipKlusta:
                         analyzed_files = klusta(set_files, settings, self=main_window)
-
-                        for file in analyzed_files:
+                        
+                        # for file in analyzed_files:
+                        for file in set_files:
                             childNum = getSetFileChildNumber(main_window, file)
 
                             # removes session from list
