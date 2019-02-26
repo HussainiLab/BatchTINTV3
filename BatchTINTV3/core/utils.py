@@ -117,12 +117,12 @@ def raise_window(new_window, old_window):
         old_window.hide()
         return
 
-    elif "Settings" in str(new_window):
+    elif "Settings_Window" in str(new_window):
         new_window.raise_window()
         # time.sleep(0.1)
         old_window.hide()
 
-    elif "Settings" in str(old_window):
+    elif "Settings_Window" in str(old_window):
         new_window.raise_()
         new_window.show()
 
