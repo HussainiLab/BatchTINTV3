@@ -62,6 +62,8 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
 
     analyzed_set_files = []
 
+    set_file_number = 0
+
     for dirname in dirnames:
         # iterate through each directory
 
@@ -104,10 +106,12 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
             msg = '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
                     str(datetime.datetime.now().date()),
                     str(datetime.datetime.now().time())[
-                    :8], set_basename, i+1, len(set_files))
+                    :8], set_basename, set_file_number+1, len(set_files))
 
             print_msg(self, msg)
 
+            set_file_number += 1
+            
             # acquires tetrode files within directory
 
             tet_list = get_tetrode_files(f_list, set_basename)
