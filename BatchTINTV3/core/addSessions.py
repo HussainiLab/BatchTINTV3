@@ -1,7 +1,7 @@
 import time
 import os
 from PyQt5 import QtWidgets
-from core.KlustaFunctions import find_tetrodes, session_analyzable
+from core.KlustaFunctions import session_analyzable
 
 
 def addSessions(self):
@@ -11,10 +11,12 @@ def addSessions(self):
     :param self: This is the self in respect to the main window of BatchTINT
     :return:
     """
-    # doesn't add sessions when re-ordering
-    while self.reordering_queue or self.modifying_list:
-        # pauses add Sessions when the individual is reordering
-        time.sleep(0.1)
+
+    if self is not None:
+        # doesn't add sessions when re-ordering
+        while self.reordering_queue or self.modifying_list:
+            # pauses add Sessions when the individual is reordering
+            time.sleep(0.1)
 
     current_directory = os.path.realpath(self.current_directory_name)
     if self.nonbatch == 0:
@@ -94,13 +96,9 @@ def addSessions(self):
                     iterator += 1
 
                 for set_file in set_files:
-                    # find all the tetrodes for that set file
-                    tetrodes = find_tetrodes(set_file, os.path.join(current_directory,
-                                                                    directory))
-
                     # check if all the tetrodes within that set file have been analyzed
                     analyzable = session_analyzable(os.path.join(current_directory, directory),
-                                                      set_file, tetrodes)
+                                                      set_file)
 
                     if analyzable:
                         # add session
@@ -121,13 +119,9 @@ def addSessions(self):
                     if set_file == self.current_session:
                         continue
 
-                    # find all the tetrodes for that set file
-                    tetrodes = find_tetrodes(set_file, os.path.join(current_directory,
-                                                                    directory))
-
                     # check if all the tetrodes within that set file have been analyzed
                     analyzable = session_analyzable(os.path.join(current_directory, directory),
-                                                      set_file, tetrodes)
+                                                    set_file)
 
                     if analyzable:
                         # add session

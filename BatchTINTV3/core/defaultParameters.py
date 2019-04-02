@@ -1,3 +1,4 @@
+import os
 # ------------- advanced klusta settings -------------
 
 defaultMaxPos = 30
@@ -39,6 +40,8 @@ defaultVerbose = 1
 defaultScreen = 1
 defaultLogFile = 1
 
+default_reporting = {'Verbose': defaultVerbose, 'Screen': defaultScreen, 'Log File': defaultLogFile}
+
 # --------- misc settings -------------------------
 
 chan_names = ['1', '2', '3', '4']
@@ -64,11 +67,12 @@ for i in range(len(chan_names)):
 
 # add an additional 1 for timestamp
 defaultUserFeatures += '1'
-
-defaultNumFet = len(feat_inc)
-defaultSilent = 1
-# defaultMulti = 0
 # defaultUserFeatures = '1111111111111'
+
+
+defaultNumFeat = len(feat_inc)
+defaultSilent = 1
+
 defaultNumThreads = 1
 defaultNonBatch = 0
 
@@ -83,3 +87,71 @@ defaultNotification = 'Off'
 # ------------- Debug options -----------------------------
 
 DebugSkipKlusta = True
+
+
+def get_default_settings():
+    settings = {}
+
+    settings.update(default_chan_value)
+    settings.update(default_feature_list)
+    settings.update(default_reporting)
+
+    UseFeatures, numFeats = calculateUseFeatures(settings)
+
+    settings['UseFeatures'] = UseFeatures
+    settings['NumFeat'] = numFeats
+
+    settings['NumThreads'] = defaultNumThreads
+
+    settings['MaxPos'] = defaultMaxPos
+    settings['nStarts'] = defaultnStarts
+    settings['RandomSeed'] = defaultRandomSeed
+    settings['DistThresh'] = defaultDistThresh
+    settings['FullStepEvery'] = defaultFullStepEvery
+    settings['ChangedThresh'] = defaultChangedThresh
+    settings['MaxIter'] = defaultMaxIter
+    settings['SplitEvery'] = defaultSplitEvery
+    settings['Subset'] = defaultSubset
+    settings['PenaltyK'] = defaultPenaltyK
+    settings['PenaltyKLogN'] = defaultPenaltyKLogN
+
+    settings['Silent'] = defaultSilent
+    settings['NumThreads'] = defaultNumThreads
+    settings['Cores'] = os.cpu_count()
+    settings['nonbatch'] = defaultNonBatch
+
+    return settings
+
+
+def calculateUseFeatures(settings):
+    """
+    Creates a mask of features to use for each channel
+
+    For every channel to include there will be 1 value,
+    """
+
+    # figuring which channels are on and off
+    chan_values = {}
+    for name in chan_names:
+        chan_values[name] = settings[name]
+
+    # defining the channels
+    feature_values = {}
+    for name in clust_feature_names:
+        feature_values[name] = settings[name]
+
+    chan_inc = [chan for chan in chan_names if chan_values[chan] == 1]
+    feat_inc = [feat for feat in clust_feature_names if feature_values[feat] == 1]
+
+    UseFeatures = ''
+    for i in range(len(chan_names)):
+        for j in range(len(feat_inc)):
+            if str(i + 1) in chan_inc:
+                UseFeatures += '1'
+            else:
+                UseFeatures += '0'
+    UseFeatures += '1'  # additional one for the timestamp
+
+    # returns the Feature mask and the number of features to include
+
+    return UseFeatures, len(feat_inc)

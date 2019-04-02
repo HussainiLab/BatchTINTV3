@@ -3,7 +3,74 @@ from core.utils import background, center
 from core.defaultParameters import defaultServerName, defaultPort, defaultUsername, defaultPassword, \
     defaultNotification
 
-import os, json
+import os, json, datetime
+import smtplib
+
+
+def send_email(errors, analyzed_directory, processed_directory, smtp_settings, expter_settings, self=None):
+
+    if smtp_settings['Notification'] == 1:
+        for experimenter, experimenter_errors in errors.items():
+            toaddrs = []
+            for key, value in expter_settings.items():
+                if str(key).lower() in str(experimenter).lower():
+                    addresses = value.split(',')
+                    for address in addresses:
+                        toaddrs.append(address.strip())
+
+            username = smtp_settings['Username']
+            password = smtp_settings['Password']
+
+            fromaddr = username
+
+            subject = '%s folder processed! [Automated Message]' % str(analyzed_directory)
+
+            text_list = ['Greetings from the Batch-TINTV3 automated messaging system!\n\n The "%s" ' % analyzed_directory + \
+                         '" directory has finished processing and is now located in the "%s" folder.\n\n' % processed_directory + \
+                         'The errors that occurred during processing are the following:\n\n']
+
+            if len(experimenter_errors) == 0:
+                text_list.append(['\n\nNo errors to report on the processing of this folder!\n\n'])
+            else:
+                for error in experimenter_errors:
+                    text_list.append('\n\n%s' % error)
+
+            text_list.append('\nHave a nice day,\n')
+            text_list.append('Batch-TINTV3\n\n')
+            text = ''.join(text_list)
+
+            # Prepare actual message
+            message = """\From: %s\nTo: %s\nSubject: %s\n\n%s
+                """ % (fromaddr, ", ".join(toaddrs), subject, text)
+
+            try:
+                # server = smtplib.SMTP('smtp.gmail.com:587')
+                server = smtplib.SMTP(str(smtp_settings['ServerName']) + ':' + str(smtp_settings['Port']))
+                server.ehlo()
+                server.starttls()
+                server.login(username, password)
+                server.sendmail(fromaddr, toaddrs, message)
+                server.close()
+
+                self.LogAppend.myGUI_signal_str.emit(
+                    '[%s %s]: Successfully sent e-mail to: %s!' % (
+                        str(datetime.datetime.now().date()),
+                        str(datetime.datetime.now().time())[
+                        :8], experimenter))
+            except:
+                if not toaddrs:
+                    self.LogAppend.myGUI_signal_str.emit(
+                        '[%s %s]: Failed to send e-mail, could not establish an address to send the e-mail to!' % (
+                            str(datetime.datetime.now().date()),
+                            str(datetime.datetime.now().time())[
+                            :8]))
+
+                else:
+                    self.LogAppend.myGUI_signal_str.emit(
+                        '[%s %s]: Failed to send e-mail, could be due to security settings of your e-mail!' % (
+                            str(datetime.datetime.now().date()),
+                            str(datetime.datetime.now().time())[
+                            :8]))
 
 
 class SmtpSettings(QtWidgets.QWidget):

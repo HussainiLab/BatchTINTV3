@@ -1,10 +1,10 @@
 # import os, read_data, json, subprocess
-import os, json, subprocess, time, datetime, queue, threading, smtplib, shutil
+import os, json, subprocess, time, datetime, queue, threading, shutil
 from distutils.dir_util import copy_tree
 from PyQt5 import QtWidgets
-# from multiprocessing.dummy import Pool as ThreadPool
-# from email.mime.text import MIMEText
 from core.utils import print_msg
+from core.Tint_Matlab import get_setfile_parameter
+from core.smtpSettings import send_email
 
 
 def is_tetrode(file, session):
@@ -24,31 +24,24 @@ def get_tetrode_files(file_list, session):
     return tetrode_files
 
 
-def klusta(set_files, settings, self=None):
+def addError(errors, experimenter, error):
+    """Associates the error with the correct experimenter"""
+    if experimenter not in errors.keys():
+        errors[experimenter] = [error]
+    else:
+        errors[experimenter].append(error)
+
+
+threadLock = threading.Lock()
+
+
+def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, append=None, self=None):
     """
     This method will perform the klusta analysis of the settings
     """
 
-    # sub_directory_fullpath = os.path.join(directory, sub_directory)  # defines fullpath
-    sub_directory_fullpath = os.path.dirname(set_files[0])
-    sub_directory = os.path.basename(os.path.dirname(set_files[0]))
-    directory = os.path.dirname(sub_directory_fullpath)
-
-    logfile_directory = os.path.join(sub_directory_fullpath, 'LogFiles')  # defines directory for log files
-    inifile_directory = os.path.join(sub_directory_fullpath, 'IniFiles')  # defines directory for .ini files
-
-    processed_directory = os.path.join(directory, 'Processed')  # defines processed file directory
-
-    for _ in [processed_directory, logfile_directory, inifile_directory]:
-        if not os.path.exists(_):  # makes the directories if they don't exist
-            os.makedirs(_)
-
-    f_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
-
-    # set_files = [file for file in f_list if '.set' in file]  # fines .set files
-
     if len(set_files) > 1:  # displays messages counting how many set files in directory
-        msg = '[%s %s]: There are %d \'.set\' files in this directory!' % (
+        msg = '[%s %s]: There are %d \'.set\' files to analyze!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
                 :8], len(set_files))
@@ -57,118 +50,228 @@ def klusta(set_files, settings, self=None):
 
     elif len(set_files) == 1:
 
-        msg = '[%s %s]: There is %d \'.set\' file in this directory!' % (
+        msg = '[%s %s]: There is %d \'.set\' file to analyze!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
                 :8], len(set_files))
 
         print_msg(self, msg)
 
-    skipped = 0
-    experimenter = []  # initializing experimenter list
-    error = []  # initializing error list
-    analyzed_set_files = []
-    for i in range(len(set_files)):  # loops through each set file
-        set_file = os.path.splitext(set_files[i])[0]  # define set file without extension
-        set_file = os.path.basename(set_file)  # we needed to add this because we changed the functionality
-        # set file used to not include the filepath, just the basename, so we will remove the filepath
-        set_path = os.path.join(sub_directory_fullpath, set_file)  # defines set file path
+    dirnames = []
+    [dirnames.append(os.path.dirname(file)) for file in set_files if os.path.dirname(file) not in dirnames]
 
-        msg = '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
+    analyzed_set_files = []
+
+    for dirname in dirnames:
+        # iterate through each directory
+
+        sub_directory = None
+        sub_directory_fullpath = None
+        processed_directory = None
+
+        directory_files = [file for file in set_files if os.path.dirname(file) == dirname]
+
+        errors = {}
+        experimenter = None
+
+        for i in range(len(directory_files)):  # loops through each set file
+
+            # define the sub directory for the current set file
+            set_file = directory_files[i]
+            # this is called sub-directory because we generally use batch mode so directory is the
+            # parent of sub-directory
+            sub_directory_fullpath = os.path.dirname(set_file)
+            sub_directory = os.path.basename(os.path.dirname(set_file))
+            directory = os.path.dirname(sub_directory_fullpath)
+
+            logfile_directory = os.path.join(sub_directory_fullpath, 'LogFiles')  # defines directory for log files
+            inifile_directory = os.path.join(sub_directory_fullpath, 'IniFiles')  # defines directory for .ini files
+
+            processed_directory = os.path.join(directory, 'Processed')  # defines processed file directory
+
+            # makes the directories if they don't exist
+            for _ in [processed_directory, logfile_directory, inifile_directory]:
+                if not os.path.exists(_):
+                    os.makedirs(_)
+
+            # finds the files within that directory
+            f_list = os.listdir(sub_directory_fullpath)
+
+            set_basename = os.path.basename(os.path.splitext(set_file)[0])
+            # set file used to not include the filepath, just the basename, so we will remove the filepath
+            # set_path = os.path.join(sub_directory_fullpath, set_basename)  # defines set file path
+
+            msg = '[%s %s]: Now analyzing tetrodes associated with the %s \'.set\' file (%d/%d)!' % (
+                    str(datetime.datetime.now().date()),
+                    str(datetime.datetime.now().time())[
+                    :8], set_basename, i+1, len(set_files))
+
+            print_msg(self, msg)
+
+            # acquires tetrode files within directory
+
+            tet_list = get_tetrode_files(f_list, set_basename)
+            #  if there are no tetrodes then skips
+
+            analyzable, error_return = check_session_files(sub_directory_fullpath, set_basename, tet_list, self=self)
+
+            if analyzable:
+                q = queue.Queue()
+                for u in tet_list:
+                    q.put(u)
+
+                ThreadCount = int(settings['NumThreads'])
+
+                if ThreadCount > len(tet_list):
+                    ThreadCount = len(tet_list)
+
+                experimenter = get_setfile_parameter('experimenter', set_file)
+
+                while not q.empty():
+                    Threads = []
+                    for i in range(ThreadCount):
+                        t = threading.Thread(target=analyze_tetrode, args=(q, settings, errors, set_file,
+                                                                           logfile_directory,
+                                                                           inifile_directory),
+                                             kwargs={'self': self,
+                                                     'append': append})
+
+                        t.daemon = True
+                        t.start()
+                        Threads.append(t)
+
+                    for t in Threads:
+                        t.join()  # waits for the threads to be finished before continuing
+
+                q.join()  # waits for the queue to be finished
+            else:
+
+                addError(errors, experimenter, error_return)
+                continue
+
+            analyzed_set_files.append(os.path.join(sub_directory_fullpath, set_file + '.set'))
+
+        msg = '[%s %s]: Analysis for the following directory has been completed: %s!' % (
                 str(datetime.datetime.now().date()),
                 str(datetime.datetime.now().time())[
-                :8], set_file, i+1, len(set_files))
+                :8], dirname)
 
         print_msg(self, msg)
 
-        # acquires tetrode files within directory
+        if smtp_settings is None:
+            if self is not None:
+                smtpfile = os.path.join(self.SETTINGS_DIR, 'smtp.json')
+                with open(smtpfile, 'r+') as filename:
+                    smtp_settings = json.load(filename)
 
-        tet_list = get_tetrode_files(f_list, set_file)
-        #  if there are no tetrodes then skips
+        if experimenter_settings is None:
+            if self is not None:
+                expter_fname = os.path.join(self.SETTINGS_DIR, 'experimenter.json')
+                with open(expter_fname, 'r+') as f:
+                    experimenter_settings = json.load(f)
 
-        analyzable, error_return = check_session_files(sub_directory_fullpath, set_file, tet_list, self=self)
+        if smtp_settings is not None and experimenter_settings is not None:
+            send_email(errors, sub_directory, processed_directory, smtp_settings, experimenter_settings, self=self)
 
-        if analyzable:
-            q = queue.Queue()
-            for u in tet_list:
-                q.put(u)
+        directory_source = sub_directory_fullpath
+        directory_destination = os.path.join(processed_directory, sub_directory)
 
-            ThreadCount = int(settings['NumThreads'])
+        # move this directory to the analyzed directory
 
-            if ThreadCount > len(tet_list):
-                ThreadCount = len(tet_list)
-            skipped_mat = []
-
-            with open(set_path + '.set', 'r+') as f:
-                for line in f:
-                    if 'experimenter ' in line:
-                        expter_line = line.split(' ', 1)
-                        expter_line.remove('experimenter')
-                        experimenter.append(' '.join(expter_line))
-                        break
-
-            while not q.empty():
-                Threads = []
-                for i in range(ThreadCount):
-                    t = threading.Thread(target=analyze_tetrode, args=(q, settings, experimenter, error, skipped_mat,
-                                                                       i, set_path, set_file, f_list,
-                                                                       sub_directory_fullpath, logfile_directory,
-                                                                       inifile_directory), kwargs={'self': self})
-                    time.sleep(1)
-                    t.daemon = True
-                    t.start()
-                    Threads.append(t)
-
-                # q.join()
-                for t in Threads:
-                    t.join()
-
-            q.join()
-        else:
-            error.extend(error_return)
-            continue
-
-        analyzed_set_files.append(os.path.join(sub_directory_fullpath, set_file + '.set'))
-
-    msg = '[%s %s]: Analysis in the %s directory has been completed!' % (
-            str(datetime.datetime.now().date()),
-            str(datetime.datetime.now().time())[
-            :8], sub_directory)
-
-    print_msg(self, msg)
-
-    processed_directory = os.path.join(directory, 'Processed')
-
-    send_email(experimenter, error, sub_directory, processed_directory, self=self)
-
-    directory_source = sub_directory_fullpath
-    directory_destination = os.path.join(processed_directory, sub_directory)
-
-    processing = 1
-    while processing == 1:
-        time.sleep(0.1)
-        processing = 0
-        try:
-            # moves the entire folder to the processed folder
-            if os.path.exists(directory_destination):
-                try:
-                    copy_tree(directory_source, directory_destination)
-                except PermissionError:
-                    return
-                shutil.rmtree(directory_source)
-            else:
-                shutil.move(directory_source, processed_directory)
-        except PermissionError:
-            processing = 1
+        moving = True
+        verbose = True
+        while moving:
+            time.sleep(0.1)
+            moving, verbose = move_analyzed_directory(directory_destination, directory_source, processed_directory,
+                                                      verbose=verbose, self=self)
 
     return analyzed_set_files
 
 
-def analyze_tetrode(q, settings,  experimenter,
-                    error, skipped_mat, index, set_path, set_file, f_list, sub_directory_fullpath,
-                    logfile_directory, inifile_directory, self=None):
+def move_analyzed_directory(directory_destination, directory_source, processed_directory, verbose=True, self=None):
+    try:
+        # moves the entire folder to the processed folder
+        if os.path.exists(directory_destination):
+            copy_tree(directory_source, directory_destination)
+            shutil.rmtree(directory_source)
+        else:
+            shutil.move(directory_source, processed_directory)
+    except PermissionError as error:
 
+        if verbose:
+            msg = '[%s %s]: Error while moving the following directory: %s\n\n%s!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], directory_source, error)
+
+            print_msg(self, msg)
+            verbose = False  # we only want this message to appear once
+        return True, verbose
+    except shutil.Error as error:
+        if verbose:
+            msg = '[%s %s]: Error while moving the following directory: %s\n\n%s!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], directory_source, error)
+
+            print_msg(self, msg)
+            verbose = False  # we only want this message to appear once
+        return True, verbose
+    return False, verbose
+
+
+def move_files(log_filepath, new_log_filepath, ini_filepath, new_ini_filepath):
+    """
+    Moves all the files to their appropriate directories
+
+    returns True when properly moved
+
+    returns False when not properly moved
+    """
+
+    try:
+        if os.path.exists(new_log_filepath):
+            os.remove(new_log_filepath)
+
+        os.rename(log_filepath, new_log_filepath)
+
+        if os.path.exists(new_ini_filepath):
+            os.remove(new_ini_filepath)
+
+        os.rename(ini_filepath, new_ini_filepath)
+
+    except FileNotFoundError:
+        return False
+    except PermissionError:
+        return False
+
+    return True
+
+
+def analyze_tetrode(q, settings, errors, set_file, logfile_directory, inifile_directory, append=None, self=None):
+    """
+
+    This function will take the queue of files, and analyze them through klustakwik
+
+    q is the queue which contains list of tetrodes.
+    settings is a dictionary that contains all the secttings values
+
+
+    """
+
+    experimenter = get_setfile_parameter('experimenter', set_file)
+
+    sub_directory_fullpath = os.path.dirname(set_file)
+
+    set_path = os.path.splitext(set_file)[0]
+    # set_basename = os.path.basename(set_path)
+
+    file_list = os.listdir(sub_directory_fullpath)  # finds the files within that directory
+
+    # file directory that will contain files with inactive tetrodes
     inactive_tet_dir = os.path.join(sub_directory_fullpath, 'InactiveTetrodeFiles')
+
+    # file directory that will contain the files with no spikes
     no_spike_dir = os.path.join(sub_directory_fullpath, 'NoSpikeFiles')
 
     if q.empty():
@@ -189,11 +292,14 @@ def analyze_tetrode(q, settings,  experimenter,
 
             print_msg(self, msg)
 
-            clu_name = '%s.clu.%d' % (set_path, tetrode)
-            cut_path = '%s_%d.cut' % (set_path, tetrode)
+            if append is not None:
+                cut_path = '%s%s_%d.cut' % (set_path, append, tetrode)
+            else:
+                cut_path = '%s_%d.cut' % (set_path, tetrode)
+
             cut_name = os.path.basename(cut_path)
 
-            if cut_name in f_list:
+            if cut_name in file_list:
                 msg = '[%s %s]: The %s file has already been analyzed!' % (
                         str(datetime.datetime.now().date()),
                         str(datetime.datetime.now().time())[
@@ -206,12 +312,13 @@ def analyze_tetrode(q, settings,  experimenter,
 
             tet_path = os.path.join(sub_directory_fullpath, tet_fname)
 
-            ini_fpath = tet_path + '.ini'  # .ini filename
-            ini_fname = tet_fname + '.ini'  # .ini fullpath
+            if append is not None:
+                ini_fpath = '%s%s.ini' % (tet_path, append)  # .ini filename
+            else:
+                ini_fpath = tet_path + '.ini'  # .ini filename
 
-            parm_space = ' '
             # klusta kwik parameters to utilize
-            kkparmstr = parm_space.join(['-MaxPossibleClusters', str(settings['MaxPos']),
+            kkparmstr = ' '.join(['-MaxPossibleClusters', str(settings['MaxPos']),
                                          '-UseFeatures', str(settings['UseFeatures']),
                                          '-nStarts', str(settings['nStarts']),
                                          '-RandomSeed', str(settings['RandomSeed']),
@@ -229,26 +336,29 @@ def analyze_tetrode(q, settings,  experimenter,
                                          '-PriorPoint', '1',
                                          ])
 
-            s = "\n"
             # channels to include
-            inc_channels = s.join(['[IncludeChannels]',
+            inc_channels = "\n".join(['[IncludeChannels]',
                                    '1=' + str(settings['1']),
                                    '2=' + str(settings['2']),
                                    '3=' + str(settings['3']),
                                    '4=' + str(settings['4'])
                                    ])
-            # write these settings to the .ini file
-            with open(ini_fpath, 'w') as fname:
 
-                s = "\n"
-                main_seq = s.join(['[Main]',
-                                   str('Filename=' + '"' + set_path + '"'),
+            # write these settings to the .ini file
+            with open(ini_fpath, 'w') as f:
+                if append is None:
+                    ini_filename_value = str('Filename="%s"' % set_path)
+                else:
+                    ini_filename_value = str('Filename="%s%s"' % (set_path, append))
+
+                main_seq = "\n".join(['[Main]',
+                                   ini_filename_value,
                                    str('IDnumber=' + str(tetrode)),
                                    str('KKparamstr=' + kkparmstr),
                                    str(inc_channels)
                                    ])
 
-                clust_ft_seq = s.join(['\n[ClusteringFeatures]',
+                clust_ft_seq = "\n".join(['\n[ClusteringFeatures]',
                                        str('PC1=' + str(settings['PC1'])),
                                        str('PC2=' + str(settings['PC2'])),
                                        str('PC3=' + str(settings['PC3'])),
@@ -263,191 +373,130 @@ def analyze_tetrode(q, settings,  experimenter,
                                        str('Ar=' + str(settings['Ar']))
                                        ])
 
-                report_seq = s.join(['\n[Reporting]',
+                report_seq = "\n".join(['\n[Reporting]',
                                      'Log=' + str(settings['Log File']),
                                      'Verbose=' + str(settings['Verbose']),
                                      'Screen=' + str(settings['Screen'])
                                      ])
-
+                # write to the settings to the .ini file
                 for write_order in [main_seq, clust_ft_seq, report_seq]:
-                    fname.seek(0, 2)  # seek the files end
-                    fname.write(write_order)
+                    f.seek(0, 2)  # seek the files end
+                    f.write(write_order)
 
-                fname.close()
+            if append is not None:
+                log_fpath = '%s%s_log.txt' % (tet_path, append)  # log file path
+            else:
+                log_fpath = tet_path + '_log.txt'
 
-            log_fpath = tet_path + '_log.txt'
             log_fname = tet_fname + '_log.txt'
 
             cmdline = ["cmd", "/q", "/k", "echo off"]
 
-            reading = 1
-            with open(tet_path, 'rb') as f:
-                while reading == 1:
-                    line = f.readline()
-                    if 'experimenter ' in str(line):
-                        expter_line = str(line).split(' ', 1)
-                        expter_line.remove("b'experimenter")
-                        experimenter.append(' '.join(expter_line))
-                        reading = 0
-                    elif 'data_start' in str(line):
-                        reading = 0
-
             cmd = subprocess.Popen(cmdline, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-            if settings['Silent'] == 0:
-                batch = bytes(
-                    'tint ' + '"' + set_path + '" ' + str(
-                        tetrode) + ' "' + log_fpath + '" /runKK /KKoptions "' +
-                    ini_fpath + '" /convertkk2cut /visible\n'
-                    'exit\n', 'ascii')
-            else:
-                batch = bytes(
-                    'tint ' + '"' + set_path + '" ' + str(
-                        tetrode) + ' "' + log_fpath + '" /runKK /KKoptions "' +
-                    ini_fpath + '" /convertkk2cut\n'
-                                'exit\n', 'ascii')
 
-            cmd.stdin.write(batch)
+            if int(settings['Silent']) == 0:
+                command = 'tint "%s" %d "%s" /runKK /KKoptions "%s" /convertkk2cut /visible\nexit\n' % (set_path,
+                                                                               int(tetrode),
+                                                                               log_fpath,
+                                                                               ini_fpath)
+            else:
+                command = 'tint "%s" %d "%s" /runKK /KKoptions "%s" /convertkk2cut\nexit\n' % (set_path,
+                                                                                                          int(tetrode),
+                                                                                                          log_fpath,
+                                                                                                          ini_fpath)
+            command = bytes(command, 'ascii')
+
+            cmd.stdin.write(command)
             cmd.stdin.flush()
 
-            processing = 1
-
-            while processing == 1:
+            processing = True
+            files_moved = False
+            # wait for the cut file to be created
+            while processing:
                 time.sleep(2)
-                new_cont = os.listdir(sub_directory_fullpath)
+                sub_dir_flist = os.listdir(sub_directory_fullpath)
+                if cut_name in sub_dir_flist:
+                    # cut file in the directory
 
-                if cut_name in new_cont:
-                    processing = 0
-                    try:
-                        try:
-                            # moves the log files
-                            try:
-                                os.rename(log_fpath, os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                            except FileNotFoundError:
-                                pass
+                    new_log_filepath = os.path.join(logfile_directory, tet_fname + '_log.txt')
+                    new_ini_filepath = os.path.join(inifile_directory, tet_fname + '.ini')
 
-                        except FileExistsError:
-                            os.remove(os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                            os.rename(log_fpath, os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                        try:
-                            # moves the .ini files
-                            os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
-                        except FileExistsError:
-                            os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
-                            os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
+                    files_moved = move_files(log_fpath, new_log_filepath, ini_fpath, new_ini_filepath)
 
+                    # files have moved properly, can set processing to False
+                    if files_moved:
+                        processing = False
+
+                    if processing is False:
+                        # files moved successfully
                         msg = '[%s %s]: The analysis of the %s file has finished!' % (
-                                str(datetime.datetime.now().date()),
-                                str(datetime.datetime.now().time())[
-                                :8], tet_fname)
+                            str(datetime.datetime.now().date()),
+                            str(datetime.datetime.now().time())[
+                            :8], tet_fname)
 
                         print_msg(self, msg)
-                        pass
 
-                    except PermissionError:
-                        processing = 1
+                        break
 
-                elif log_fname in new_cont:
-                    active_tet = []
-                    no_spike = []
+                # check the log filename to see if there are any error to report
+                elif log_fname in sub_dir_flist:
                     with open(log_fpath, 'r') as f:
                         for line in f:
                             if 'list of active tetrodes:' in line:
-                                activ_tet = line
                                 if str(tetrode) not in str(line):
-
+                                    # create the folder that will contain sessions with inactive tetrodes
                                     if not os.path.exists(inactive_tet_dir):
                                         os.makedirs(inactive_tet_dir)
 
-                                    cur_date = datetime.datetime.now().date()
-                                    cur_time = datetime.datetime.now().time()
-                                    not_active = ': Tetrode ' + str(tetrode) + ' is not active within the ' + \
-                                                 set_file + ' set file!'
-                                    error.append('\tTetrode ' + str(tetrode) + ' was not active within the ' + \
-                                                 set_file + ' \'.set\' file, couldn\'t perform analysis.\n')
-                                    print('[' + str(cur_date) + ' ' + str(cur_time)[:8] + ']' + not_active)
+                                    message = '[%s %s]: Tetrode %s is not active within the following set file: %s!' % (
+                                        str(datetime.datetime.now().date()),
+                                        str(datetime.datetime.now().time())[:8],
+                                        str(tetrode),
+                                        set_file
+                                    )
+
+                                    print_msg(self, message + '#red')
+
+                                    addError(errors, experimenter, message)
+
+                                    new_log_filepath = os.path.join(inactive_tet_dir, tet_fname + '_log.txt')
+                                    new_ini_filepath = os.path.join(inactive_tet_dir, tet_fname + '.ini')
+
+                                    # move the files
+                                    moving = True
+                                    while moving:
+                                        moving = move_files(log_fpath, new_log_filepath, ini_fpath, new_ini_filepath)
+
+                                    processing = False
                                     break
+
                             elif 'reading 0 spikes' in line:
 
+                                # create the folder that will contains sessions with no spikes
                                 if not os.path.exists(no_spike_dir):
                                     os.makedirs(no_spike_dir)
 
-                                no_spike = 1
-                                # skipped_mat.append(1)
-                                cur_date = datetime.datetime.now().date()
-                                cur_time = datetime.datetime.now().time()
-                                not_spike = ': Tetrode ' + str(tetrode) + ' within the ' + \
-                                             set_file + ' \'.set\' file, has no spikes, skipping analysis!'
+                                message = '[%s %s]: Tetrode %s within the following set file has no spikes: %s!' % (
+                                    str(datetime.datetime.now().date()),
+                                    str(datetime.datetime.now().time())[:8],
+                                    str(tetrode),
+                                    set_file
+                                )
 
-                                error.append('\tTetrode ' + str(tetrode) + ' within the ' + \
-                                             set_file + ' \'.set\' file, had no spikes, couldn\'t perform analysis\n')
+                                print_msg(self, message + '#red')
 
-                                print('[' + str(cur_date) + ' ' + str(cur_time)[:8] + ']' + not_spike)
+                                addError(errors, experimenter, message)
+
+                                new_log_filepath = os.path.join(no_spike_dir, tet_fname + '_log.txt')
+                                new_ini_filepath = os.path.join(no_spike_dir, tet_fname + '.ini')
+
+                                # move the files
+                                moving = True
+                                while moving:
+                                    moving = move_files(log_fpath, new_log_filepath, ini_fpath, new_ini_filepath)
+
+                                processing = False
                                 break
-
-                            else:
-                                activ_tet = []
-
-                    if 'activ_tet' in locals() and activ_tet != [] and str(tetrode) not in str(activ_tet):
-                        x = 1
-                        while x == 1:
-                            try:
-                                try:
-                                    # moves the log files
-                                    try:
-                                        os.rename(log_fpath,
-                                                  os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                                    except FileNotFoundError:
-                                        pass
-
-                                except FileExistsError:
-                                    os.remove(os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                                    os.rename(log_fpath,
-                                              os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                                try:
-                                    # moves the .ini files
-                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
-                                except FileExistsError:
-                                    os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
-                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
-
-                                os.rename(tet_path, os.path.join(inactive_tet_dir, tet_fname))
-
-                                x = 0
-
-                            except PermissionError:
-                                x = 1
-                            processing = 0
-
-                    if 'no_spike' in locals() and no_spike == 1:
-                        x = 1
-                        while x == 1:
-                            try:
-                                try:
-                                    # moves the log files
-                                    try:
-                                        os.rename(log_fpath,
-                                                  os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                                    except FileNotFoundError:
-                                        pass
-
-                                except FileExistsError:
-                                    os.remove(os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                                    os.rename(log_fpath,
-                                              os.path.join(logfile_directory, tet_fname + '_log.txt'))
-                                try:
-                                    # moves the .ini files
-                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
-                                except FileExistsError:
-                                    os.remove(os.path.join(inifile_directory, tet_fname + '.ini'))
-                                    os.rename(ini_fpath, os.path.join(inifile_directory, tet_fname + '.ini'))
-
-                                os.rename(tet_path, os.path.join(no_spike_dir, tet_fname))
-
-                                x = 0
-
-                            except PermissionError:
-                                x = 1
-                            processing = 0
 
             try:
                 q.task_done()
@@ -458,9 +507,6 @@ def analyze_tetrode(q, settings,  experimenter,
 def check_klusta_ready(settings, directory, self=None, settings_filename=None, numThreads=None, numCores=None):
     klusta_ready = True
 
-    # with open(settings_filename, 'r+') as f:  # opens setting file
-    #     settings = json.load(f)  # loads settings
-
     settings['NumThreads'] = str(numThreads)
     settings['Cores'] = str(numCores)
 
@@ -469,13 +515,13 @@ def check_klusta_ready(settings, directory, self=None, settings_filename=None, n
         with open(settings_filename, 'w') as filename:
             json.dump(settings, filename)
 
-    if settings['NumFet'] > 4:
+    if settings['NumFeat'] > 4:
 
         if self is not None:
-            self.choice = ''
+            self.choice = None
             self.LogError.myGUI_signal_str.emit('ManyFet')
 
-            while self.choice == '':
+            while self.choice is None:
                 time.sleep(1)
 
             if self.choice == QtWidgets.QMessageBox.No:
@@ -483,14 +529,19 @@ def check_klusta_ready(settings, directory, self=None, settings_filename=None, n
             elif self.choice == QtWidgets.QMessageBox.Yes:
                 klusta_ready = True
         else:
-            print("You have chosen more than four features. clustering will take a long time!")
+
+            message = '[%s %s]: You have chosen more than four features. clustering will take a long time!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[:8])
+
+            print_msg(self, message)
 
     if directory == 'No Directory Currently Chosen!':
 
         if self is None:
-            self.choice = ''
+            self.choice = None
             self.LogError.myGUI_signal_str.emit('NoDir')
-            while self.choice == '':
+            while self.choice is None:
                 time.sleep(1)
 
             if self.choice == QtWidgets.QMessageBox.Ok:
@@ -498,9 +549,9 @@ def check_klusta_ready(settings, directory, self=None, settings_filename=None, n
 
     if 'Google Drive' in directory:
         if self is None:
-            self.choice = ''
+            self.choice = None
             self.LogError.myGUI_signal_str.emit('GoogleDir')
-            while self.choice == '':
+            while self.choice is None:
                 time.sleep(1)
 
             if self.choice == QtWidgets.QMessageBox.Yes:
@@ -596,97 +647,6 @@ def get_associated_files(file_list, set_filename):
     return [file for file in file_list if set_filename == os.path.splitext(file)[0]]
 
 
-def send_email(experimenter, error, sub_directory, processed_directory, self=None):
-
-    smtpfile = os.path.join(self.SETTINGS_DIR, 'smtp.json')
-    with open(smtpfile, 'r+') as filename:
-        smtp_data = json.load(filename)
-
-        if smtp_data['Notification'] == 'On':
-
-            expter_fname = os.path.join(self.SETTINGS_DIR, 'experimenter.json')
-            with open(expter_fname, 'r+') as f:
-                expters = json.load(f)
-
-            toaddrs = []
-            for key, value in expters.items():
-                if str(key).lower() in str(experimenter).lower():
-                    if ',' in value and ', ' not in value:
-                        addresses = value.split(', ', 1)
-                        for address in addresses:
-                            toaddrs.append(address)
-                    elif ', ' in value:
-                        addresses = value.split(', ', 1)
-                        for address in addresses:
-                            toaddrs.append(address)
-                    else:
-                        addresses = [value]
-                        for address in addresses:
-                            toaddrs.append(address)
-
-            username = smtp_data['Username']
-            password = smtp_data['Password']
-
-            fromaddr = username
-
-            if not error:
-                error = ['\tNo errors to report on the processing of this folder!\n\n']
-
-            subject = str(sub_directory) + ' folder processed! [Automated Message]'
-
-            text_list = ['Greetings from the Batch-TINTV2 automated messaging system!\n\n',
-                         'The "' + sub_directory + '" directory has finished processing and is now located in the "' +
-                         processed_directory + '" folder.\n\n',
-                         'The errors that occurred during processing are the following:\n\n']
-
-            for i in range(len(error)):
-                text_list.append(error[i])
-
-            '''
-            for i in range(len(error)):
-                for k in range(1, int(self.settings['NumTet']) + 1):
-                    if '%s %d' % ('Tetrode', k) in error[i]:
-                        while
-                        text_list.append(error[i])
-            '''
-            text_list.append('\nHave a nice day,\n')
-            text_list.append('Batch-TINTV2\n\n')
-            text = ''.join(text_list)
-
-            # Prepare actual message
-            message = """\From: %s\nTo: %s\nSubject: %s\n\n%s
-                """ % (fromaddr, ", ".join(toaddrs), subject, text)
-
-            try:
-                # server = smtplib.SMTP('smtp.gmail.com:587')
-                server = smtplib.SMTP(str(smtp_data['ServerName']) + ':' + str(smtp_data['Port']))
-                server.ehlo()
-                server.starttls()
-                server.login(username, password)
-                server.sendmail(fromaddr, toaddrs, message)
-                server.close()
-
-                self.LogAppend.myGUI_signal_str.emit(
-                    '[%s %s]: Successfully sent e-mail to: %s!' % (
-                        str(datetime.datetime.now().date()),
-                        str(datetime.datetime.now().time())[
-                        :8], experimenter))
-            except:
-                if not toaddrs:
-                    self.LogAppend.myGUI_signal_str.emit(
-                        '[%s %s]: Failed to send e-mail, could not establish an address to send the e-mail to!' % (
-                            str(datetime.datetime.now().date()),
-                            str(datetime.datetime.now().time())[
-                            :8]))
-
-                else:
-                    self.LogAppend.myGUI_signal_str.emit(
-                        '[%s %s]: Failed to send e-mail, could be due to security settings of your e-mail!' % (
-                            str(datetime.datetime.now().date()),
-                            str(datetime.datetime.now().time())[
-                            :8]))
-
-
 def find_sessions(directory):
 
     set_files = [file for file in os.listdir(directory) if '.set' in file and
@@ -716,12 +676,24 @@ def is_tetrode(file, session):
         return False
 
 
-def session_analyzable(directory, session, tetrodes):
+def session_analyzable(directory, session, append=None):
+
+    # find all the tetrodes for that set file
+    tetrodes = find_tetrodes(session, directory)
+
     session_basename = os.path.splitext(session)[0]
-    analyzable = [file for file in tetrodes if not os.path.exists(os.path.join(directory,
-                                                                                '%s_%s.cut' % (session_basename,
-                                                                                               os.path.splitext(file)[
-                                                                                                   1][1:])))]
+    if append is None:
+        analyzable = [file for file in tetrodes if not os.path.exists(os.path.join(directory,
+                                                                                    '%s_%s.cut' % (session_basename,
+                                                                                                   os.path.splitext(file)[
+                                                                                                       1][1:])))]
+    else:
+        analyzable = [file for file in tetrodes if not os.path.exists(os.path.join(directory,
+                                                                                   '%s%s_%s.cut' % (session_basename,
+                                                                                                    append,
+                                                                                                  os.path.splitext(
+                                                                                                      file)[
+                                                                                                      1][1:])))]
     if analyzable:
         return True
     else:

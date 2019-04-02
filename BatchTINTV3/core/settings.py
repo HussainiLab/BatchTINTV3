@@ -1,11 +1,11 @@
 from PyQt5 import QtCore, QtWidgets
-import functools, json
+import json
 import os
 from core.utils import center, background
 from core.defaultParameters import defaultMaxPos, defaultnStarts, defaultRandomSeed, defaultDistThresh, \
     defaultPenaltyK, defaultPenaltyKLogN, defaultChangedThresh, defaultMaxIter, defaultSplitEvery, defaultFullStepEvery, \
     defaultSubset, defaultPC1, defaultPC2, defaultPC3, defaultInclude1, defaultInclude2, defaultInclude3, defaultInclude4, \
-    defaultVerbose, defaultScreen, defaultLogFile, defaultNumFet, defaultSilent, defaultUserFeatures, \
+    defaultVerbose, defaultScreen, defaultLogFile, defaultNumFeat, defaultSilent, defaultUserFeatures, \
     defaultNumThreads, defaultNonBatch, defaultPC4, defaultA, defaultVt, defaultP, defaultT, defaulttP, defaulttT, \
     defaultEn, defaultAr
 
@@ -305,7 +305,7 @@ class Settings_Window(QtWidgets.QTabWidget):
                                    self.default_reporting]:
                     self.settings.update(dictionary)
 
-                self.settings['NumFet'] = defaultNumFet
+                self.settings['NumFeat'] = defaultNumFeat
                 self.settings['Silent'] = defaultSilent
                 # self.settings['Multi'] = defaultMulti
                 self.settings['UseFeatures'] = defaultUserFeatures
@@ -504,7 +504,7 @@ class Settings_Window(QtWidgets.QTabWidget):
                     UseFeat += '0'
         UseFeat += '1'
 
-        settings['NumFet'] = len(feat_inc)
+        settings['NumFeat'] = len(feat_inc)
         settings['UseFeatures'] = UseFeat
 
         return settings
@@ -574,7 +574,7 @@ class Settings_Window(QtWidgets.QTabWidget):
                     UseFeat += '0'
         UseFeat += '1'
 
-        self.settings['NumFet'] = len(feat_inc)
+        self.settings['NumFeat'] = len(feat_inc)
         self.settings['UseFeatures'] = UseFeat
 
     def set_previous_advanced_settings(self, settings):

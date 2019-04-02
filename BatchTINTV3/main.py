@@ -1,11 +1,11 @@
 import sys, json, datetime, os, time
 from PIL import Image
 from PyQt5 import QtCore, QtGui, QtWidgets
-from core.utils import center, background, Worker, find_consec, Large_Font, Small_Font, find_keys, raise_window, \
+from core.utils import center, background, Worker, find_consec, find_keys, raise_window, \
     cancel_window, Communicate
 from core.settings import Settings_Window
 from core.smtpSettings import SmtpSettings, AddExpter, add_Expter
-from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready, find_tetrodes, session_analyzable
+from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready
 from core.ChooseDirectory import chooseDirectory, new_directory
 from core.addSessions import RepeatAddSessions
 from core.utils import print_msg
@@ -55,7 +55,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.reordering_queue = False
         self.modifying_list = False
 
-        self.choice = ''
+        self.choice = None
         self.home()  # runs the home function
 
     def home(self):  # defines the home function (the main window)
@@ -664,16 +664,16 @@ def runGUI(main_window, settings_window, directory):
 
         if main_window.directory_queue.topLevelItemCount() == 0:
             if main_window.nonbatch == 1:
-                main_window.choice = ''
+                main_window.choice = None
                 main_window.LogError.myGUI_signal_str.emit('InvDirNonBatch')
-                while main_window.choice == '':
+                while main_window.choice is None:
                     time.sleep(0.2)
                 main_window.stopBatch()
                 return
             else:
-                main_window.choice = ''
+                main_window.choice = None
                 main_window.LogError.myGUI_signal_str.emit('InvDirBatch')
-                while main_window.choice == '':
+                while main_window.choice is None:
                     time.sleep(0.2)
 
                 if main_window.choice == QtWidgets.QMessageBox.Abort:
