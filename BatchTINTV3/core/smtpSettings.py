@@ -2,7 +2,6 @@ from PyQt5 import QtCore, QtWidgets
 from core.utils import background, center
 from core.defaultParameters import defaultServerName, defaultPort, defaultUsername, defaultPassword, \
     defaultNotification
-
 import os, json, datetime
 import smtplib
 

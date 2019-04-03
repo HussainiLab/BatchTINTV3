@@ -5,10 +5,12 @@ from core.utils import center, background, Worker, find_consec, find_keys, raise
     cancel_window, Communicate
 from core.settings import Settings_Window
 from core.smtpSettings import SmtpSettings, AddExpter, add_Expter
-from core.KlustaFunctions import klusta, check_klusta_ready, folder_ready
+from core.klusta_functions import klusta, check_klusta_ready
+from core.klusta_utils import folder_ready
 from core.ChooseDirectory import chooseDirectory, new_directory
 from core.addSessions import RepeatAddSessions
 from core.utils import print_msg
+from core.defaultParameters import defaultAppend
 # from core.defaultParameters import DebugSkipKlusta
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
@@ -30,6 +32,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.BatchTintThread = QtCore.QThread()
         self.reset_add_thread = False
         self.repeat_thread_active = False
+        self.append_changed = False
 
         self.current_session = ''
         self.current_subdirectory = ''
@@ -118,7 +121,6 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         self.nonbatch_check = QtWidgets.QCheckBox('Non-Batch?')
         self.nonbatch_check.setToolTip("Check this if you don't want to run batch. This means you will choose\n"
                                        "the folder that directly contains all the session files (.set, .pos, .N, etc.).")
-        self.nonbatch = 0
 
         self.silent_cb = QtWidgets.QCheckBox('Run Silently')
         self.silent_cb.setToolTip("Check if you want Tint to run in the background.")
@@ -165,14 +167,26 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
             else:
                 Multi_layout.addWidget(order, 0, QtCore.Qt.AlignCenter)
 
-        checkbox_layout = QtWidgets.QHBoxLayout()
-        checkbox_layout.addStretch(1)
-        checkbox_layout.addWidget(self.nonbatch_check)
-        checkbox_layout.addStretch(1)
-        checkbox_layout.addWidget(self.silent_cb)
-        checkbox_layout.addStretch(1)
-        checkbox_layout.addLayout(Multi_layout)
-        checkbox_layout.addStretch(1)
+        # ----- append cut --------------------
+        append_cut_label = QtWidgets.QLabel("Append Cut:")
+        self.append_cut = QtWidgets.QLineEdit()
+        self.append_cut.setText(defaultAppend)
+        self.append_cut.textChanged.connect(self.change_append)
+
+        append_cut_layout = QtWidgets.QHBoxLayout()
+        append_cut_layout.addWidget(append_cut_label)
+        append_cut_layout.addWidget(self.append_cut)
+
+        parameter_layout = QtWidgets.QHBoxLayout()
+        parameter_layout.addStretch(1)
+        parameter_layout.addWidget(self.nonbatch_check)
+        parameter_layout.addStretch(1)
+        parameter_layout.addWidget(self.silent_cb)
+        parameter_layout.addStretch(1)
+        parameter_layout.addLayout(Multi_layout)
+        parameter_layout.addStretch(1)
+        parameter_layout.addLayout(append_cut_layout)
+        parameter_layout.addStretch(1)
 
         try:
             with open(self.settings_fname, 'r+') as filename:
@@ -186,6 +200,8 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         except FileNotFoundError:
             self.silent_cb.toggle()
             self.numThreads.setText('1')
+
+        self.get_non_batch()
 
         # ------------- Log Box -------------------------
         self.Log = QtWidgets.QTextEdit()
@@ -217,7 +233,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         for butn in btn_order:  # adds the buttons in the proper order
             btn_layout.addWidget(butn)
 
-        layout_order = [cumc_logo, layout1, checkbox_layout, queue_and_btn_layout, log_lay, btn_layout]
+        layout_order = [cumc_logo, layout1, parameter_layout, queue_and_btn_layout, log_lay, btn_layout]
 
         layout.addStretch(1)  # adds the widgets/layouts according to the order
         for order in layout_order:
@@ -322,6 +338,12 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         A function that will append the Log field of the main window (mainly
         used as a slot for a custom pyqt signal)
         """
+        if '#' in message:
+            message = message.split('#')
+            color = message[-1].lower()
+            message = message[0]
+            message = '<span style="color:%s">%s</span>' % (color, message)
+
         self.Log.append(message)
 
     def stopBatch(self):
@@ -354,6 +376,12 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
         self.restart_add_sessions_thread()
 
+    def change_append(self):
+
+        self.change_append_time = time.time()
+        self.append_changed = True
+        # self.restart_add_sessions_thread()
+
     def restart_add_sessions_thread(self):
 
         self.reset_add_thread = True
@@ -364,8 +392,6 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         while self.repeat_thread_active:
             time.sleep(0.1)
 
-        # self.reset_add_thread = False
-        # self.RepeatAddSessionsThread = QtCore.QThread()
         self.RepeatAddSessionsThread.setTerminationEnabled(True)
         self.RepeatAddSessionsThread.start()
 
@@ -542,8 +568,13 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         (QTreeWidgetItem.parent() or root).removeChild(QTreeWidgetItem)
         self.child_removed = True
 
-    def getMainWindowSettings(self):
+    def get_non_batch(self):
+        if self.nonbatch_check.isChecked():
+            self.nonbatch = 1
+        else:
+            self.nonbatch = 0
 
+    def getMainWindowSettings(self):
         settings = {}
 
         if self.silent_cb.isChecked():
@@ -572,6 +603,7 @@ def disableParameters(main_window):
     main_window.choose_dir.setEnabled(0)
     main_window.setbtn.setEnabled(0)
     main_window.current_directory.setEnabled(0)
+    main_window.append_cut.setEnabled(0)
 
 
 def enableParameters(main_window):
@@ -581,16 +613,22 @@ def enableParameters(main_window):
     main_window.choose_dir.setEnabled(1)
     main_window.setbtn.setEnabled(1)
     main_window.current_directory.setEnabled(1)
+    main_window.append_cut.setEnabled(1)
 
 
 def getNextSetFiles(self):
 
     set_files = []
 
+    if self.nonbatch == 0:
+        directory = self.current_directory.text()
+    elif self.nonbatch == 1:
+        directory = os.path.dirname(self.current_directory.text())
+
     subdirectory = self.directory_item.data(0, 0)
     for i in range(self.directory_item.childCount()):
         session_item = self.directory_item.child(i)
-        set_files.append(os.path.join(self.current_directory.text(), subdirectory, session_item.data(0, 0)))
+        set_files.append(os.path.realpath(os.path.join(directory, subdirectory, session_item.data(0, 0))))
 
     return set_files
 
@@ -745,7 +783,7 @@ def runGUI(main_window, settings_window, directory):
                         set_files = getNextSetFiles(main_window)
 
                         # if not DebugSkipKlusta:
-                        analyzed_files = klusta(set_files, settings, self=main_window)
+                        analyzed_files = klusta(set_files, settings, self=main_window, append=main_window.append_cut.text())
 
                         # for file in analyzed_files:
                         for file in set_files:

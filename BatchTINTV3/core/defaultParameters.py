@@ -75,6 +75,7 @@ defaultSilent = 1
 
 defaultNumThreads = 1
 defaultNonBatch = 0
+defaultMoveValue = 1
 
 # ------------- default smtp settings ----------------
 defaultServerName = 'smtp.gmail.com'
@@ -87,6 +88,10 @@ defaultNotification = 'Off'
 # ------------- Debug options -----------------------------
 
 DebugSkipKlusta = True
+
+# misc options
+
+defaultAppend = ''
 
 
 def get_default_settings():
@@ -119,6 +124,8 @@ def get_default_settings():
     settings['NumThreads'] = defaultNumThreads
     settings['Cores'] = os.cpu_count()
     settings['nonbatch'] = defaultNonBatch
+
+    settings['MoveFiles'] = defaultMoveValue
 
     return settings
 

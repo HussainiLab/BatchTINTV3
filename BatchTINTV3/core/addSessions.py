@@ -1,7 +1,10 @@
 import time
 import os
 from PyQt5 import QtWidgets
-from core.KlustaFunctions import session_analyzable
+from core.klusta_utils import session_analyzable
+import threading
+
+threadLock = threading.Lock()
 
 
 def addSessions(self):
@@ -18,6 +21,8 @@ def addSessions(self):
             # pauses add Sessions when the individual is reordering
             time.sleep(0.1)
 
+        self.get_non_batch()
+
     current_directory = os.path.realpath(self.current_directory_name)
     if self.nonbatch == 0:
         # finds the sub directories within the chosen directory
@@ -33,6 +38,11 @@ def addSessions(self):
         # this is non-batch mode, use the chosen directory as the "sub-directory"
         sub_directories = [os.path.basename(current_directory)]
         current_directory = os.path.dirname(current_directory)
+
+    with threadLock:
+        cut_append = self.append_cut.text()
+        if cut_append == '':
+            cut_append = None
 
     # find items already in the queue
     added_directories = []
@@ -98,7 +108,7 @@ def addSessions(self):
                 for set_file in set_files:
                     # check if all the tetrodes within that set file have been analyzed
                     analyzable = session_analyzable(os.path.join(current_directory, directory),
-                                                      set_file)
+                                                      set_file, append=cut_append)
 
                     if analyzable:
                         # add session
@@ -121,7 +131,7 @@ def addSessions(self):
 
                     # check if all the tetrodes within that set file have been analyzed
                     analyzable = session_analyzable(os.path.join(current_directory, directory),
-                                                    set_file)
+                                                    set_file, append=cut_append)
 
                     if analyzable:
                         # add session
@@ -142,31 +152,31 @@ def RepeatAddSessions(main_window):
     """
 
     # the thread is active, set to true
+
     main_window.repeat_thread_active = True
 
-    try:
-        # try adding a session
-        main_window.adding_session = True
-        addSessions(main_window)
-        # not adding sessions anymore
-        main_window.adding_session = False
-    except FileNotFoundError:
-        pass
-    except RuntimeError:
-        pass
-
     while True:
-        if main_window.reset_add_thread:
-            main_window.repeat_thread_active = False
-            main_window.reset_add_thread = False
-            return
+
+        with threadLock:
+            if main_window.reset_add_thread:
+                main_window.repeat_thread_active = False
+                main_window.reset_add_thread = False
+                return
+
+        if main_window.append_changed:
+            # then we have changed the append cut value, clear the
+            main_window.directory_queue.clear()
+            while (time.time() - main_window.change_append_time) < 1:
+                time.sleep(0.25)
+                main_window.append_changed = False
 
         try:
-            main_window.adding_session = True
-            time.sleep(0.1)
+            with threadLock:
+                main_window.adding_session = True
             addSessions(main_window)
-            main_window.adding_session = False
-            time.sleep(0.1)
+
+            with threadLock:
+                main_window.adding_session = False
         except FileNotFoundError:
             pass
         except RuntimeError:
