@@ -21,6 +21,7 @@ setuptools.setup(
     install_requires=
     [
         'PyQt5',
+        # 'PyQt5_sip'
         'pillow',
     ],
     package_data={'BatchTINTV3': ['img/*.png']},
