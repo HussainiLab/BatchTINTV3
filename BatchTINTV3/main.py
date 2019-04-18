@@ -78,16 +78,6 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
                 directory_data = {'directory': current_directory_name}  # creates a dictionary
                 json.dump(directory_data, filename)  # writes the dictionary to the file
 
-        # ---------------logo --------------------------------
-
-        cumc_logo = QtWidgets.QLabel(self)  # defining the logo image
-        logo_fname = os.path.join(self.IMG_DIR, "BatchKlustaLogo.png")  # defining logo pathname
-        im2 = Image.open(logo_fname)  # opening the logo with PIL
-        logowidth, logoheight = im2.size  # acquiring the logo width/height
-        logo_pix = QtGui.QPixmap(logo_fname)  # getting the pixmap
-        cumc_logo.setPixmap(logo_pix)  # setting the pixmap
-        cumc_logo.setGeometry(0, 0, logowidth, logoheight)  # setting the geometry
-
         # ------buttons ------------------------------------------
         quitbtn = QtWidgets.QPushButton('Quit', self)  # making a quit button
         quitbtn.clicked.connect(self.close_app)  # defining the quit button functionality (once pressed)
@@ -233,7 +223,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         for butn in btn_order:  # adds the buttons in the proper order
             btn_layout.addWidget(butn)
 
-        layout_order = [cumc_logo, layout1, parameter_layout, queue_and_btn_layout, log_lay, btn_layout]
+        layout_order = [layout1, parameter_layout, queue_and_btn_layout, log_lay, btn_layout]
 
         layout.addStretch(1)  # adds the widgets/layouts according to the order
         for order in layout_order:

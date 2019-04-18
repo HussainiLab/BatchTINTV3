@@ -33,7 +33,7 @@ def background(self):  # defines the background for each window
         os.mkdir(self.SETTINGS_DIR)
 
     # Acquiring information about geometry
-    self.setWindowIcon(QtGui.QIcon(os.path.join(self.IMG_DIR, 'cumc-crown.png')))  # declaring the icon image
+    self.setWindowIcon(QtGui.QIcon(os.path.join(self.IMG_DIR, 'GEBA_Logo.png')))  # declaring the icon image
     self.deskW, self.deskH = QtWidgets.QDesktopWidget().availableGeometry().getRect()[2:]  # gets the window resolution
     # self.setWindowState(QtCore.Qt.WindowMaximized) # will maximize the GUI
     self.setGeometry(0, 0, self.deskW/2, self.deskH/2)  # Sets the window size, 800x460 is the size of our window
