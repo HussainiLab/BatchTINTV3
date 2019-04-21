@@ -624,12 +624,17 @@ def getNextSetFiles(self):
 
 
 def getSetFileChildNumber(self, set_file):
-
+    """
+    This function will find the position within the Queue that the Session is located in.
+    :param self:
+    :param set_file:
+    :return:
+    """
     subdirectory = self.directory_item.data(0, 0)
     for i in range(self.directory_item.childCount()):
         session_item = self.directory_item.child(i)
         current_setfile = os.path.join(self.current_directory.text(), subdirectory, session_item.data(0, 0))
-        if set_file == current_setfile:
+        if os.path.realpath(set_file) == os.path.realpath(current_setfile):
             return i
 
     return None
