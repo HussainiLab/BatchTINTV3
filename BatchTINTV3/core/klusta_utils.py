@@ -1,5 +1,6 @@
 import os
 from distutils.dir_util import copy_tree
+import distutils
 from core.utils import print_msg
 import datetime
 import shutil
@@ -60,6 +61,17 @@ def move_analyzed_directory(directory_destination, directory_source, processed_d
             print_msg(self, msg)
             verbose = False  # we only want this message to appear once
         return True, verbose
+    except distutils.errors.DistutilsFileError as error:
+        if verbose:
+            msg = '[%s %s]: Error while moving the following directory: %s\n\n%s!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], directory_source, error)
+
+            print_msg(self, msg)
+            verbose = False  # we only want this message to appear once
+        return True, verbose
+
     return False, verbose
 
 
