@@ -633,7 +633,12 @@ def getSetFileChildNumber(self, set_file):
     subdirectory = self.directory_item.data(0, 0)
     for i in range(self.directory_item.childCount()):
         session_item = self.directory_item.child(i)
-        current_setfile = os.path.join(self.current_directory.text(), subdirectory, session_item.data(0, 0))
+        if self.nonbatch == 1:
+            current_setfile = os.path.realpath(os.path.join(self.current_directory.text(), session_item.data(0, 0)))
+        else:
+            current_setfile = os.path.realpath(os.path.join(self.current_directory.text(), subdirectory,
+                                                            session_item.data(0, 0)))
+
         if os.path.realpath(set_file) == os.path.realpath(current_setfile):
             return i
 

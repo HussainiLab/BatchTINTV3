@@ -77,6 +77,8 @@ def addSessions(self):
                          not os.path.isdir(os.path.join(current_directory, directory, file))]
         except FileNotFoundError:
             return
+        except PermissionError:
+            return
 
         # if there are set files add them
         if set_files:
