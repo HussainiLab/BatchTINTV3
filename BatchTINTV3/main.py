@@ -1,6 +1,5 @@
 import sys, json, datetime, os, time
-from PIL import Image
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtWidgets
 from core.utils import center, background, Worker, find_consec, find_keys, raise_window, \
     cancel_window, Communicate
 from core.settings import Settings_Window
@@ -11,7 +10,6 @@ from core.ChooseDirectory import chooseDirectory, new_directory
 from core.addSessions import RepeatAddSessions
 from core.utils import print_msg
 from core.defaultParameters import defaultAppend
-# from core.defaultParameters import DebugSkipKlusta
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
 

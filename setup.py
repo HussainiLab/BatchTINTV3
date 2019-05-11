@@ -10,7 +10,7 @@ pkg_name = "BatchTINTV3"
 
 setuptools.setup(
     name=pkg_name,
-    version="3.0.14",
+    version="3.0.15",
     author="Geoffrey Barrett",
     author_email="geoffrey.m.barrett@gmail.com",
     description="BatchTINTV3 - GUI created to more efficiently sort Axona/Tint data.",
@@ -21,10 +21,6 @@ setuptools.setup(
     install_requires=
     [
         'PyQt5',
-        # 'PyQt5_sip'
-        'pillow',
-        'numpy',
-        'scipy',
     ],
     package_data={'BatchTINTV3': ['img/*.png']},
     classifiers=[
