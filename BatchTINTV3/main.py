@@ -10,7 +10,6 @@ from core.ChooseDirectory import chooseDirectory, new_directory
 from core.addSessions import RepeatAddSessions
 from core.utils import print_msg
 from core.defaultParameters import defaultAppend
-from core.delete_temp import get_temp_files
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
 
@@ -369,7 +368,6 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
 
         self.change_append_time = time.time()
         self.append_changed = True
-        # self.restart_add_sessions_thread()
 
     def restart_add_sessions_thread(self):
 

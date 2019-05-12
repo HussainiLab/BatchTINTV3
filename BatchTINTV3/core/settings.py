@@ -11,8 +11,17 @@ from .defaultParameters import defaultMaxPos, defaultnStarts, defaultRandomSeed,
 
 
 class Settings_Window(QtWidgets.QTabWidget):
-    def __init__(self):
+    def __init__(self, settings_fname=None):
         super(Settings_Window, self).__init__()
+
+        background(self)
+
+        # normally the settings filename is set in background() however, I added this additional input for other
+        # GUI's that will be using BatchTINT (such as BinConverter). That way I could use an alternative settings file
+        # there to separate batch settings from that GUI's settings.
+        if settings_fname is not None:
+            self.settings_fname = settings_fname
+
         self.Settings()
 
     def Settings(self):
@@ -36,7 +45,6 @@ class Settings_Window(QtWidgets.QTabWidget):
         tab1 = QtWidgets.QWidget()  # creates the basic tab
         tab2 = QtWidgets.QWidget()  # creates the advanced tab
 
-        background(self)
         # deskW, deskH = background.Background(self)
         self.setWindowTitle("BatchTINT - Settings Window")
 
@@ -287,6 +295,7 @@ class Settings_Window(QtWidgets.QTabWidget):
             with open(self.settings_fname, 'w') as filename:
                 # initialize values
                 # self.default_set_feats = self.set_feats
+
                 self.default_set_feats = {}
                 self.default_set_feats['PC1'] = defaultPC1
                 self.default_set_feats['PC2'] = defaultPC2
