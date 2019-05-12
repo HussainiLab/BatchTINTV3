@@ -179,6 +179,7 @@ def RepeatAddSessions(main_window):
 
             with threadLock:
                 main_window.adding_session = False
+                time.sleep(0.1)
         except FileNotFoundError:
             pass
         except RuntimeError:

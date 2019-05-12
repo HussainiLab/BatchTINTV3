@@ -280,7 +280,7 @@ class Settings_Window(QtWidgets.QTabWidget):
                 if int(self.settings['delete_temporary']) == 1:
                     self.delete_temporary.toggle()
 
-                if int(self.settings['move_proecssed']) == 1:
+                if int(self.settings['move_processed']) == 1:
                     self.move_processed.toggle()
 
         except FileNotFoundError:
@@ -328,7 +328,7 @@ class Settings_Window(QtWidgets.QTabWidget):
                 self.settings['Cores'] = os.cpu_count()
                 self.settings['nonbatch'] = defaultNonBatch
                 self.settings['delete_temporary'] = default_delete_temporary
-                self.settings['move_proecssed'] = default_move_processed
+                self.settings['move_processed'] = default_move_processed
 
                 json.dump(self.settings, filename)  # save the default values to this file
 
@@ -360,7 +360,7 @@ class Settings_Window(QtWidgets.QTabWidget):
                 if int(self.settings['delete_temporary']) == 1:
                     self.delete_temporary.toggle()
 
-                if int(self.settings['move_proecssed']) == 1:
+                if int(self.settings['move_processed']) == 1:
                     self.move_processed.toggle()
 
         center(self)
@@ -607,9 +607,9 @@ class Settings_Window(QtWidgets.QTabWidget):
                 if self.report_cbs[self.position[option]].isChecked():
                     self.report_cbs[self.position[option]].toggle()
 
-        default_widgets = [self.delete_temporary, self.move_processed]
-        default_values = [default_delete_temporary, default_move_processed]
-        for widget, default_value in zip(default_widgets, default_values):
+        widgets = [self.delete_temporary, self.move_processed]
+        widget_values = [settings['delete_temporary'], settings['move_processed']]
+        for widget, default_value in zip(widgets, widget_values):
             if int(default_value) == 1:
                 if not widget.isChecked():
                     widget.toggle()

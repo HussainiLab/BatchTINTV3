@@ -5,6 +5,7 @@ from .utils import print_msg
 from .smtpSettings import send_email
 from .klusta_utils import addError, get_tetrode_files, move_analyzed_directory, move_files, get_associated_files, \
     write_klusta_ini
+from .delete_temp import get_temp_files
 
 
 threadLock = threading.Lock()
@@ -163,7 +164,7 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
                 addError(errors, experimenter, error_return)
                 continue
 
-            analyzed_set_files.append(os.path.join(sub_directory_fullpath, set_file + '.set'))
+            analyzed_set_files.append(os.path.join(sub_directory_fullpath, set_file))
 
         msg = '[%s %s]: Analysis for the following directory has been completed: %s!' % (
                 str(datetime.datetime.now().date()),
@@ -195,6 +196,21 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
 
         directory_source = sub_directory_fullpath
         directory_destination = os.path.join(processed_directory, sub_directory)
+
+        # delete the temporary files
+        if settings['delete_temporary'] == 1:
+            msg = '[%s %s]: Deleting temporary files within the following directory: %s!' % (
+                str(datetime.datetime.now().date()),
+                str(datetime.datetime.now().time())[
+                :8], sub_directory)
+
+            print_msg(self, msg)
+
+            for file in analyzed_set_files:
+                set_path = os.path.splitext(file)[0]
+                temp_files = get_temp_files(set_path, append=self.append_cut.text())
+                for _f in temp_files:
+                    os.remove(_f)
 
         # move this directory to the analyzed directory
         if int(settings['move_processed']) == 1:
