@@ -2,12 +2,47 @@
 import os, json, subprocess, time, datetime, queue, threading
 from PyQt5 import QtWidgets
 from core.utils import print_msg
-from core.Tint_Matlab import get_setfile_parameter
 from core.smtpSettings import send_email
 from core.klusta_utils import addError, get_tetrode_files, move_analyzed_directory, move_files, get_associated_files, write_klusta_ini
 
 
 threadLock = threading.Lock()
+
+
+def get_setfile_parameter(parameter, set_filename):
+    """
+    This function will return the parameter value of a given parameter name for a given set filename.
+
+    Example:
+        set_fullpath = 'C:\\example\\tetrode_1.1'
+        parameter_name = 'duration
+        duration = get_setfile_parameter(parameter_name, set_fullpath)
+
+    Args:
+        parameter (str): the name of the set file parameter that you want to obtain.
+        set_filename (str): the full path of the .set file that you want to obtain the parameter value from.
+
+
+    Returns:
+        parameter_value (str): the value for the given parameter
+
+    """
+
+    if not os.path.exists(set_filename):
+        return
+
+    # adding the encoding because tint data is created via windows and if you want to run this in linux, you need
+    # to explicitly say this
+    with open(set_filename, 'r+', encoding='cp1252') as f:
+        for line in f:
+            if parameter in line:
+                if line.split(' ')[0] == parameter:
+                    # prevents part of the parameter being in another parameter name
+                    new_line = line.strip().split(' ')
+                    if len(new_line) == 2:
+                        return new_line[-1]
+                    else:
+                        return ' '.join(new_line[1:])
 
 
 def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, append=None, self=None):
