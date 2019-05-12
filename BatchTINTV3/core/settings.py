@@ -1,13 +1,13 @@
 from PyQt5 import QtCore, QtWidgets
 import json
 import os
-from core.utils import center, background
-from core.defaultParameters import defaultMaxPos, defaultnStarts, defaultRandomSeed, defaultDistThresh, \
+from .utils import center, background
+from .defaultParameters import defaultMaxPos, defaultnStarts, defaultRandomSeed, defaultDistThresh, \
     defaultPenaltyK, defaultPenaltyKLogN, defaultChangedThresh, defaultMaxIter, defaultSplitEvery, defaultFullStepEvery, \
     defaultSubset, defaultPC1, defaultPC2, defaultPC3, defaultInclude1, defaultInclude2, defaultInclude3, defaultInclude4, \
     defaultVerbose, defaultScreen, defaultLogFile, defaultNumFeat, defaultSilent, defaultUserFeatures, \
     defaultNumThreads, defaultNonBatch, defaultPC4, defaultA, defaultVt, defaultP, defaultT, defaulttP, defaulttT, \
-    defaultEn, defaultAr
+    defaultEn, defaultAr, default_delete_temporary, default_move_processed
 
 
 class Settings_Window(QtWidgets.QTabWidget):
@@ -21,10 +21,6 @@ class Settings_Window(QtWidgets.QTabWidget):
 
         :return:
         """
-        # self.set_adv = {}
-        # self.set_feats = {}
-        # self.set_chan_inc = {}
-        # self.reporting = {}
 
         self.position = {}
 
@@ -85,7 +81,6 @@ class Settings_Window(QtWidgets.QTabWidget):
         positions = [(i, j) for i in range(1) for j in range(4)]
 
         for position, option in zip(positions, self.report):
-
             if option == '':
                 continue
             self.position[option] = position
@@ -106,7 +101,6 @@ class Settings_Window(QtWidgets.QTabWidget):
         self.chan_inc_cbs = {}
 
         positions = [(i, j) for i in range(1) for j in range(4)]
-
         for position, chan_name in zip(positions, self.chan_names):
 
             if chan_name == '':
@@ -118,6 +112,22 @@ class Settings_Window(QtWidgets.QTabWidget):
         chan_name_lay = QtWidgets.QHBoxLayout()
         chan_name_lay.addWidget(chan_inc)
         chan_name_lay.addLayout(grid_chan)
+
+        # Miscellaneous Settings
+        misc_l = QtWidgets.QLabel('Miscellaneous Settings:')
+
+        self.delete_temporary = QtWidgets.QCheckBox("Delete Temporary Files")
+        self.move_processed = QtWidgets.QCheckBox("Move Processed Files")
+
+        misc_widgets = [self.delete_temporary, self.move_processed]
+        positions = [(i, j) for i in range(1) for j in range(len(misc_widgets))]
+        misc_grid = QtWidgets.QGridLayout()
+        for position, widget in zip(positions, misc_widgets):
+            misc_grid.addWidget(widget, *position)
+
+        misc_layout = QtWidgets.QHBoxLayout()
+        misc_layout.addWidget(misc_l)
+        misc_layout.addLayout(misc_grid)
 
         # --------------------------adv lay doublespinbox------------------------------------------------
 
@@ -211,7 +221,7 @@ class Settings_Window(QtWidgets.QTabWidget):
             adv_butn_lay.addWidget(order, 0, QtCore.Qt.AlignCenter)
 
         # -------------------------- layouts ----------------------------------------------------
-        basic_lay_order = [chan_name_lay, clust_feat_lay, grid_lay, basic_butn_lay]
+        basic_lay_order = [chan_name_lay, clust_feat_lay, grid_lay, misc_layout, basic_butn_lay]
         basic_lay = QtWidgets.QVBoxLayout()
 
         # basic_lay.addStretch(1)
@@ -253,7 +263,6 @@ class Settings_Window(QtWidgets.QTabWidget):
                 self.SplitEvery.setText(str(self.settings['SplitEvery']))
                 self.FullStepEvery.setText(str(self.settings['FullStepEvery']))
                 self.Subset.setText(str(self.settings['Subset']))
-                # self.num_tet.setText(str(self.settings['NumTet']))
 
                 for name in self.chan_names:
                     if int(self.settings[name]) == 1:
@@ -267,6 +276,12 @@ class Settings_Window(QtWidgets.QTabWidget):
                 for option in self.report:
                     if int(self.settings[option]) == 1:
                         self.report_cbs[self.position[option]].toggle()
+
+                if int(self.settings['delete_temporary']) == 1:
+                    self.delete_temporary.toggle()
+
+                if int(self.settings['move_proecssed']) == 1:
+                    self.move_processed.toggle()
 
         except FileNotFoundError:
             with open(self.settings_fname, 'w') as filename:
@@ -312,6 +327,8 @@ class Settings_Window(QtWidgets.QTabWidget):
                 self.settings['NumThreads'] = defaultNumThreads
                 self.settings['Cores'] = os.cpu_count()
                 self.settings['nonbatch'] = defaultNonBatch
+                self.settings['delete_temporary'] = default_delete_temporary
+                self.settings['move_proecssed'] = default_move_processed
 
                 json.dump(self.settings, filename)  # save the default values to this file
 
@@ -339,6 +356,13 @@ class Settings_Window(QtWidgets.QTabWidget):
                 for option in self.report:
                     if int(self.settings[option]) == 1:
                         self.report_cbs[self.position[option]].toggle()
+
+                if int(self.settings['delete_temporary']) == 1:
+                    self.delete_temporary.toggle()
+
+                if int(self.settings['move_proecssed']) == 1:
+                    self.move_processed.toggle()
+
         center(self)
 
     def adv_default(self):
@@ -368,6 +392,7 @@ class Settings_Window(QtWidgets.QTabWidget):
         default_set_feats = {'PC1': defaultPC1, 'PC2': defaultPC2, 'PC3': defaultPC3, 'PC4': defaultPC4,
                              'A': defaultA, 'Vt': defaultVt, 'P': defaultP, 'T': defaultT, 'tP': defaulttP,
                              'tT': defaulttT, 'En': defaultEn, 'Ar': defaultAr}
+
         # setting default channels to include
         default_set_channels_inc = {'1': defaultInclude1, '2': defaultInclude2, '3': defaultInclude3,
                                     '4': defaultInclude4}
@@ -409,6 +434,16 @@ class Settings_Window(QtWidgets.QTabWidget):
                 # uncheck checked items
                 if self.report_cbs[self.position[option]].isChecked():
                     self.report_cbs[self.position[option]].toggle()
+
+        default_widgets = [self.delete_temporary, self.move_processed]
+        default_values = [default_delete_temporary, default_move_processed]
+        for widget, default_value in zip(default_widgets, default_values):
+            if int(default_value) == 1:
+                if not widget.isChecked():
+                    widget.toggle()
+            elif int(default_value) == 0:
+                if widget.isChecked():
+                    widget.toggle()
 
         # overwrite the settings file
         self.overwrite_basic_settings(False)
@@ -492,6 +527,16 @@ class Settings_Window(QtWidgets.QTabWidget):
             else:
                 settings[option] = 0
 
+        if self.delete_temporary.isChecked():
+            settings['delete_temporary'] = 1
+        else:
+            settings['delete_temporary'] = 0
+
+        if self.move_processed.isChecked():
+            settings['move_processed'] = 1
+        else:
+            settings['move_processed'] = 0
+
         chan_inc = [chan for chan in self.chan_names if settings[chan] == 1]
         feat_inc = [feat for feat in self.clust_ft_names if settings[feat] == 1]
 
@@ -561,6 +606,16 @@ class Settings_Window(QtWidgets.QTabWidget):
                 # uncheck checked items
                 if self.report_cbs[self.position[option]].isChecked():
                     self.report_cbs[self.position[option]].toggle()
+
+        default_widgets = [self.delete_temporary, self.move_processed]
+        default_values = [default_delete_temporary, default_move_processed]
+        for widget, default_value in zip(default_widgets, default_values):
+            if int(default_value) == 1:
+                if not widget.isChecked():
+                    widget.toggle()
+            elif int(default_value) == 0:
+                if widget.isChecked():
+                    widget.toggle()
 
         chan_inc = [chan for chan in self.chan_names if settings[chan] == 1]
         feat_inc = [feat for feat in self.clust_ft_names if settings[feat] == 1]

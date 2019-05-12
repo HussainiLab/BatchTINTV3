@@ -10,6 +10,7 @@ from core.ChooseDirectory import chooseDirectory, new_directory
 from core.addSessions import RepeatAddSessions
 from core.utils import print_msg
 from core.defaultParameters import defaultAppend
+from core.delete_temp import get_temp_files
 
 _author_ = "Geoffrey Barrett"  # defines myself as the author
 
@@ -783,7 +784,21 @@ def runGUI(main_window, settings_window, directory):
                         # if not DebugSkipKlusta:
                         analyzed_files = klusta(set_files, settings, self=main_window, append=main_window.append_cut.text())
 
-                        # for file in analyzed_files:
+                        # delete the temporary files
+                        if settings['delete_temporary'] == 1:
+                            msg = '[%s %s]: deleting temporary files within the following directory: %s!' % (
+                                str(datetime.datetime.now().date()),
+                                str(datetime.datetime.now().time())[
+                                :8], sub_directory)
+
+                            print_msg(main_window, msg)
+
+                            for file in analyzed_files:
+                                set_path = os.path.splitext(file)[0]
+                                temp_files = get_temp_files(set_path, append=main_window.append_cut.text())
+                                for _f in temp_files:
+                                    os.remove(_f)
+
                         for file in set_files:
                             childNum = getSetFileChildNumber(main_window, file)
 

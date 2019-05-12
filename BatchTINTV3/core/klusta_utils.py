@@ -1,7 +1,7 @@
 import os
 from distutils.dir_util import copy_tree
 import distutils
-from core.utils import print_msg
+from .utils import print_msg
 import datetime
 import shutil
 import time

@@ -1,9 +1,10 @@
 # import os, read_data, json, subprocess
 import os, json, subprocess, time, datetime, queue, threading
 from PyQt5 import QtWidgets
-from core.utils import print_msg
-from core.smtpSettings import send_email
-from core.klusta_utils import addError, get_tetrode_files, move_analyzed_directory, move_files, get_associated_files, write_klusta_ini
+from .utils import print_msg
+from .smtpSettings import send_email
+from .klusta_utils import addError, get_tetrode_files, move_analyzed_directory, move_files, get_associated_files, \
+    write_klusta_ini
 
 
 threadLock = threading.Lock()
@@ -196,13 +197,7 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
         directory_destination = os.path.join(processed_directory, sub_directory)
 
         # move this directory to the analyzed directory
-        moveFiles = 1
-        if 'MoveFiles' not in settings.keys():
-            moveFiles = 1
-        else:
-            moveFiles = int(settings['MoveFiles'])
-
-        if moveFiles == 1:
+        if int(settings['move_processed']) == 1:
             moving = True
             verbose = True
             while moving:

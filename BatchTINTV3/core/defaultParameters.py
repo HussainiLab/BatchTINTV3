@@ -93,6 +93,11 @@ DebugSkipKlusta = True
 
 defaultAppend = ''
 
+# ----------- misc settings -------------------
+
+default_delete_temporary = 1
+default_move_processed = 1
+
 
 def get_default_settings():
     settings = {}
@@ -126,6 +131,9 @@ def get_default_settings():
     settings['nonbatch'] = defaultNonBatch
 
     settings['MoveFiles'] = defaultMoveValue
+
+    settings['delete_temporary'] = default_delete_temporary
+    settings['move_processed'] = default_move_processed
 
     return settings
 

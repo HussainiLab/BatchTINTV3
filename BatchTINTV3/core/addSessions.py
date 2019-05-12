@@ -1,7 +1,7 @@
 import time
 import os
 from PyQt5 import QtWidgets
-from core.klusta_utils import session_analyzable
+from .klusta_utils import session_analyzable
 import threading
 
 threadLock = threading.Lock()

@@ -1,4 +1,4 @@
-from core.utils import background, center
+from .utils import background, center
 import json
 from PyQt5 import QtCore, QtWidgets
 import os
