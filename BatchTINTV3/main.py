@@ -200,14 +200,9 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         log_lay.addWidget(self.Log)
 
         # ------------------------------------ version information -------------------------------------------------
-        # finds the modification date of the program
-        try:
-            mod_date = time.ctime(os.path.getmtime(__file__))
-        except:
-            mod_date = time.ctime(os.path.getmtime(os.path.join(self.PROJECT_DIR, "BatchSort.exe")))
 
         # creates a label with that information
-        vers_label = QtWidgets.QLabel("BatchTINT V3.0 - Last Updated: " + mod_date)
+        vers_label = QtWidgets.QLabel("BatchTINT V3.8")
 
         # ------------------- page layout ----------------------------------------
         layout = QtWidgets.QVBoxLayout()  # setting the layout
