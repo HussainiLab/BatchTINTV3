@@ -10,7 +10,7 @@ pkg_name = "BatchTINTV3"
 
 setuptools.setup(
     name=pkg_name,
-    version="3.0.18",
+    version="3.0.2",
     author="Geoffrey Barrett",
     author_email="geoffrey.m.barrett@gmail.com",
     description="BatchTINTV3 - GUI created to more efficiently sort Axona/Tint data.",
@@ -24,7 +24,7 @@ setuptools.setup(
     ],
     package_data={'BatchTINTV3': ['img/*.png']},
     classifiers=[
-        "Programming Language :: Python :: 3.8 ",
+        "Programming Language :: Python :: 3.7 ",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3) ",
         "Operating System :: OS Independent",
     ],

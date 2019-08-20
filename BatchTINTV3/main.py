@@ -202,7 +202,7 @@ class Window(QtWidgets.QWidget):  # defines the window class (main window)
         # ------------------------------------ version information -------------------------------------------------
 
         # creates a label with that information
-        vers_label = QtWidgets.QLabel("BatchTINT V3.8")
+        vers_label = QtWidgets.QLabel("BatchTINT V3.0.2")
 
         # ------------------- page layout ----------------------------------------
         layout = QtWidgets.QVBoxLayout()  # setting the layout
