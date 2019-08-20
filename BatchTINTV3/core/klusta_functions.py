@@ -208,7 +208,12 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
 
             for file in analyzed_set_files:
                 set_path = os.path.splitext(file)[0]
-                temp_files = get_temp_files(set_path, append=self.append_cut.text())
+
+                if hasattr(self, 'append_cut'):
+                    append = self.append_cut.text()
+                else:
+                    append = None
+                temp_files = get_temp_files(set_path, append=append)
                 for _f in temp_files:
                     os.remove(_f)
 
