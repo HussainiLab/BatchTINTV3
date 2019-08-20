@@ -100,11 +100,17 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
 
             logfile_directory = os.path.join(sub_directory_fullpath, 'LogFiles')  # defines directory for log files
             inifile_directory = os.path.join(sub_directory_fullpath, 'IniFiles')  # defines directory for .ini files
-
             processed_directory = os.path.join(directory, 'Processed')  # defines processed file directory
 
+            # create these directories if they don't exist
+            check_dirs = [logfile_directory, inifile_directory]
+
+            # if the users is going to move the files to the processed folder, then create the Processed folder
+            if int(settings['move_processed']) == 1:
+                check_dirs.append(processed_directory)
+
             # makes the directories if they don't exist
-            for _ in [processed_directory, logfile_directory, inifile_directory]:
+            for _ in check_dirs:
                 if not os.path.exists(_):
                     os.makedirs(_)
 
@@ -192,7 +198,13 @@ def klusta(set_files, settings, smtp_settings=None, experimenter_settings=None, 
                     experimenter_settings = None
 
         if smtp_settings is not None and experimenter_settings is not None:
-            send_email(errors, sub_directory, processed_directory, smtp_settings, experimenter_settings, self=self)
+
+            if settings['move_processed'] == 1:
+                smtp_directory = processed_directory
+            else:
+                smtp_directory = sub_directory_fullpath
+
+            send_email(errors, sub_directory, smtp_directory, smtp_settings, experimenter_settings, self=self)
 
         directory_source = sub_directory_fullpath
         directory_destination = os.path.join(processed_directory, sub_directory)
