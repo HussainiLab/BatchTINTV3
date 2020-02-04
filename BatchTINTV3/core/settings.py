@@ -285,11 +285,19 @@ class Settings_Window(QtWidgets.QTabWidget):
                     if int(self.settings[option]) == 1:
                         self.report_cbs[self.position[option]].toggle()
 
-                if int(self.settings['delete_temporary']) == 1:
-                    self.delete_temporary.toggle()
+                if 'delete_temporary' in self.settings.keys():
+                    if int(self.settings['delete_temporary']) == 1:
+                        self.delete_temporary.toggle()
+                else:
+                    if int(default_delete_temporary) == 1:
+                        self.delete_temporary.toggle()
 
-                if int(self.settings['move_processed']) == 1:
-                    self.move_processed.toggle()
+                if 'move_processed' in self.settings.keys():
+                    if int(self.settings['move_processed']) == 1:
+                        self.move_processed.toggle()
+                else:
+                    if int(default_move_processed) == 1:
+                        self.move_processed.toggle()
 
         except FileNotFoundError:
             with open(self.settings_fname, 'w') as filename:
