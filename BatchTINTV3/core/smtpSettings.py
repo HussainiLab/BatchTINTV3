@@ -78,7 +78,7 @@ class SmtpSettings(QtWidgets.QWidget):
         background(self)
         width = self.deskW / 3
         height = self.deskH / 3
-        self.setGeometry(0, 0, width, height)
+        #self.setGeometry(0, 0, width, height)
 
         self.smtpfile = os.path.join(self.SETTINGS_DIR, 'smtp.json')  # defining the directory filename
 
@@ -273,7 +273,7 @@ class AddExpter(QtWidgets.QWidget):
         # deskW, deskH = background.Background(self)
         width = self.deskW / 3
         height = self.deskH / 3
-        self.setGeometry(0, 0, width, height)
+        #self.setGeometry(0, 0, width, height)
         self.setWindowTitle("BatchTINT - Add Experimenter")
 
         # ------------- widgets ---------------------------------------------------

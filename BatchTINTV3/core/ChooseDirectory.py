@@ -11,7 +11,7 @@ class chooseDirectory(QtWidgets.QWidget):
         background(self)
         width = self.deskW / 5
         height = self.deskH / 5
-        self.setGeometry(0, 0, width, height)
+        #self.setGeometry(0, 0, width, height)
 
         with open(self.directory_settings, 'r+') as filename:
             directory_data = json.load(filename)
